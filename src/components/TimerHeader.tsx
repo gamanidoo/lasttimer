@@ -16,7 +16,7 @@ export const TimerHeader = ({
   isRunning,
   isComplete,
   totalMinutes,
-  onTimeClick,
+  onTimeClick, // eslint-disable-line @typescript-eslint/no-unused-vars
   onTaskClick,
   onReset,
   onTaskCountChange

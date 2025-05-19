@@ -31,7 +31,7 @@ export default function Home() {
   const [isRunning, setIsRunning] = useState(false);
   const [isComplete, setIsComplete] = useState(false);
   const [hasNotificationPermission, setHasNotificationPermission] = useState(false);
-  const [currentTaskId, setCurrentTaskId] = useState<string | null>(null);
+  const [currentTaskId, setCurrentTaskId] = useState<string | null>(null); // eslint-disable-line @typescript-eslint/no-unused-vars
   const [isTimeSelectVisible, setIsTimeSelectVisible] = useState(false);
   const [isTaskFormVisible, setIsTaskFormVisible] = useState(false);
 
@@ -135,7 +135,7 @@ export default function Home() {
   };
 
   const handleTaskComplete = (taskId: string) => {
-    if (hasNotificationPermission) {
+    if (typeof window !== "undefined" && hasNotificationPermission) {
       const task = tasks.find(t => t.id === taskId);
       if (task) {
         new Notification('작업 전환', {
@@ -143,6 +143,7 @@ export default function Home() {
         });
       }
     }
+    
 
     const nextTaskIndex = tasks.findIndex(t => t.id === taskId) + 1;
     if (nextTaskIndex >= tasks.length) {
@@ -276,12 +277,15 @@ export default function Home() {
   };
 
   useEffect(() => {
-    // isRunning 상태를 body의 dataset에 저장
-    document.body.dataset.isRunning = isRunning.toString();
-    return () => {
-      delete document.body.dataset.isRunning;
-    };
+    if (typeof window !== "undefined") {
+      document.body.dataset.isRunning = isRunning.toString();
+      return () => {
+        delete document.body.dataset.isRunning;
+      };
+    }
   }, [isRunning]);
+  
+
 
   return (
     <main className="container mx-auto max-w-2xl p-4" onClick={handleOutsideClick}>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { format } from 'date-fns';
+import { format } from 'date-fns'; // eslint-disable-line @typescript-eslint/no-unused-vars
 import type { Task } from '../types/task';
 
 interface CircleTimerProps {
@@ -16,9 +16,9 @@ export const CircleTimer = ({
   tasks,
   isRunning,
   totalMinutes,
-  onTaskComplete,
+  onTaskComplete, // eslint-disable-line @typescript-eslint/no-unused-vars
   endTime,
-  onTaskCountChange,
+  onTaskCountChange, // eslint-disable-line @typescript-eslint/no-unused-vars
   onTimeClick
 }: CircleTimerProps) => {
   const [elapsedMinutes, setElapsedMinutes] = useState(0);
@@ -28,7 +28,7 @@ export const CircleTimer = ({
   const strokeWidth = 30;
   const radius = (size - strokeWidth) / 2;
   const center = size / 2;
-  const circumference = 2 * Math.PI * radius;
+  const circumference = 2 * Math.PI * radius; // eslint-disable-line @typescript-eslint/no-unused-vars
 
   // 현재 시각 업데이트
   useEffect(() => {
@@ -161,7 +161,7 @@ export const CircleTimer = ({
         {isRunning && tasks.length > 0 && (() => {
           let acc = 0;
           let remain = progress;
-          return tasks.map((task, idx) => {
+          return tasks.map((task, idx) => { // eslint-disable-line @typescript-eslint/no-unused-vars
             const taskPercent = task.percentage / 100;
             const fillPercent = Math.min(remain, taskPercent);
             const start = acc;

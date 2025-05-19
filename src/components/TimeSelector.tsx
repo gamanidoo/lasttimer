@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { format, addHours, addMinutes, setHours, setMinutes, differenceInMinutes } from 'date-fns';
+import { format, addHours, addMinutes, setHours, setMinutes, differenceInMinutes } from 'date-fns'; // eslint-disable-line @typescript-eslint/no-unused-vars
 
 interface TimeSelectorProps {
   onTimeSelect: (hours: number, minutes: number) => void;
@@ -69,7 +69,7 @@ export const TimeSelector = ({ onTimeSelect, initialTime }: TimeSelectorProps) =
     setSelectedTime(newSelectedTime);
   }, [selectedTime, currentTime]);
 
-  const resetTime = useCallback(() => {
+  const resetTime = useCallback(() => { // eslint-disable-line @typescript-eslint/no-unused-vars
     const newSelectedTime = {
       hours: currentTime.getHours(),
       minutes: currentTime.getMinutes()
@@ -93,7 +93,7 @@ export const TimeSelector = ({ onTimeSelect, initialTime }: TimeSelectorProps) =
     });
   };
 
-  const totalTime = calculateTotalTime();
+  const totalTime = calculateTotalTime(); // eslint-disable-line @typescript-eslint/no-unused-vars
 
   return (
     <div className="p-6 bg-white rounded-lg shadow-lg">

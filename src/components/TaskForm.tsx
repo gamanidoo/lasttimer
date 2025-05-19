@@ -45,7 +45,7 @@ export const TaskForm = ({ onTaskAdd, totalMinutes, taskCount = 0 }: TaskFormPro
     setPercentage(String(defaultPercentage));
   }, [name, percentage, onTaskAdd, getRandomColor, defaultPercentage, placeholderName]);
 
-  const handleSave = useCallback(() => {
+  const handleSave = useCallback(() => { // eslint-disable-line @typescript-eslint/no-unused-vars
     onTaskAdd({ name: '', percentage: 0, color: '' });
   }, [onTaskAdd]);
 

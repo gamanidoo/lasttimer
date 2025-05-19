@@ -6,15 +6,16 @@ interface NotificationManagerProps {
 
 export const NotificationManager = ({ onPermissionChange }: NotificationManagerProps) => {
   const [permission, setPermission] = useState<NotificationPermission>('default');
+  const [isClient, setIsClient] = useState(false);
 
   useEffect(() => {
-    if (!('Notification' in window)) {
-      console.log('이 브라우저는 알림을 지원하지 않습니다.');
-      return;
-    }
+    // 클라이언트 사이드 확인
+    setIsClient(true);
 
-    setPermission(Notification.permission);
-    onPermissionChange(Notification.permission === 'granted');
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      setPermission(Notification.permission);
+      onPermissionChange(Notification.permission === 'granted');
+    }
   }, [onPermissionChange]);
 
   const requestPermission = async () => {
@@ -27,7 +28,8 @@ export const NotificationManager = ({ onPermissionChange }: NotificationManagerP
     }
   };
 
-  if (!('Notification' in window)) {
+  // SSR 시에는 렌더링하지 않음
+  if (!isClient || typeof window === 'undefined' || !('Notification' in window)) {
     return null;
   }
 
@@ -46,4 +48,4 @@ export const NotificationManager = ({ onPermissionChange }: NotificationManagerP
       </button>
     </div>
   );
-}; 
+};
