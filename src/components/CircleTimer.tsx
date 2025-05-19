@@ -24,17 +24,23 @@ export const CircleTimer = ({
   const [elapsedMinutes, setElapsedMinutes] = useState(0);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [startTime, setStartTime] = useState<Date | null>(null);
+  const [displayEndTime, setDisplayEndTime] = useState(endTime);
   const size = 300;
   const strokeWidth = 30;
   const radius = (size - strokeWidth) / 2;
   const center = size / 2;
   const circumference = 2 * Math.PI * radius; // eslint-disable-line @typescript-eslint/no-unused-vars
 
+  // endTime prop이 변경될 때마다 displayEndTime 업데이트
+  useEffect(() => {
+    setDisplayEndTime(endTime);
+  }, [endTime]);
+
   // 현재 시각 업데이트
   useEffect(() => {
     const interval = setInterval(() => {
       setCurrentTime(new Date());
-    }, 60000); // 1분마다 업데이트
+    }, 1000); // 1초마다 업데이트
 
     return () => clearInterval(interval);
   }, []);
@@ -228,7 +234,7 @@ export const CircleTimer = ({
               ) : (
                 <div>지금시간: {formatTimeText(currentTime.getHours(), currentTime.getMinutes())}</div>
               )}
-              <div>종료시간: {formatTimeText(endTime.hours, endTime.minutes)}</div>
+              <div>종료시간: {formatTimeText(displayEndTime.hours, displayEndTime.minutes)}</div>
             </div>
           )}
         </div>

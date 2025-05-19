@@ -67,7 +67,8 @@ export const TimeSelector = ({ onTimeSelect, initialTime }: TimeSelectorProps) =
     };
 
     setSelectedTime(newSelectedTime);
-  }, [selectedTime, currentTime]);
+    onTimeSelect(newSelectedTime.hours, newSelectedTime.minutes);
+  }, [selectedTime, currentTime, onTimeSelect]);
 
   const resetTime = useCallback(() => { // eslint-disable-line @typescript-eslint/no-unused-vars
     const newSelectedTime = {
@@ -129,8 +130,12 @@ export const TimeSelector = ({ onTimeSelect, initialTime }: TimeSelectorProps) =
         <button
           onClick={() => {
             const defaultTime = addHours(new Date(), 1);
-            setSelectedTime({ hours: defaultTime.getHours(), minutes: defaultTime.getMinutes() });
-            onTimeSelect(defaultTime.getHours(), defaultTime.getMinutes());
+            const newTime = {
+              hours: defaultTime.getHours(),
+              minutes: defaultTime.getMinutes()
+            };
+            setSelectedTime(newTime);
+            onTimeSelect(newTime.hours, newTime.minutes);
           }}
           className="px-4 py-2 rounded-lg bg-yellow-500 text-white hover:bg-yellow-600 transition-colors"
         >
