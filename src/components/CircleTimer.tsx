@@ -128,24 +128,16 @@ export const CircleTimer = ({
     return `M ${start.x} ${start.y} A ${radius} ${radius} 0 ${largeArcFlag} 1 ${end.x} ${end.y}`;
   };
 
-  const getProgressArc = (progress: number) => {
-    // 12시 방향(-90도)에서 시작
-    const startAngle = -90;
-    const endAngle = (progress * 360) - 90;
-    
-    const start = {
-      x: center + radius * Math.cos((startAngle * Math.PI) / 180),
-      y: center + radius * Math.sin((startAngle * Math.PI) / 180)
-    };
-    
-    const end = {
-      x: center + radius * Math.cos((endAngle * Math.PI) / 180),
-      y: center + radius * Math.sin((endAngle * Math.PI) / 180)
-    };
-    
-    const largeArcFlag = progress > 0.5 ? 1 : 0;
-    
-    return `M ${center} ${center} L ${start.x} ${start.y} A ${radius} ${radius} 0 ${largeArcFlag} 1 ${end.x} ${end.y} Z`;
+  const getPiePath = (startPercent: number, endPercent: number) => {
+    const r = radius - strokeWidth / 2;
+    const startAngle = startPercent * 2 * Math.PI - Math.PI / 2;
+    const endAngle = endPercent * 2 * Math.PI - Math.PI / 2;
+    const x1 = center + r * Math.cos(startAngle);
+    const y1 = center + r * Math.sin(startAngle);
+    const x2 = center + r * Math.cos(endAngle);
+    const y2 = center + r * Math.sin(endAngle);
+    const largeArcFlag = endPercent - startPercent > 0.5 ? 1 : 0;
+    return `M ${center} ${center} L ${x1} ${y1} A ${r} ${r} 0 ${largeArcFlag} 1 ${x2} ${y2} Z`;
   };
 
   let currentPercentage = 0;
@@ -165,7 +157,31 @@ export const CircleTimer = ({
           strokeWidth={strokeWidth}
         />
 
-        {/* 작업 구간 */}
+        {/* 진행률 파이차트 (작업별 색상) */}
+        {isRunning && tasks.length > 0 && (() => {
+          let acc = 0;
+          let remain = progress;
+          return tasks.map((task, idx) => {
+            const taskPercent = task.percentage / 100;
+            const fillPercent = Math.min(remain, taskPercent);
+            const start = acc;
+            const end = acc + fillPercent;
+            acc += taskPercent;
+            remain -= fillPercent;
+            if (fillPercent <= 0) return null;
+            return (
+              <path
+                key={task.id}
+                d={getPiePath(start, end)}
+                fill={task.color}
+                fillOpacity={0.4}
+                stroke="none"
+              />
+            );
+          });
+        })()}
+
+        {/* 작업 구간 (테두리) */}
         {tasks.map((task) => {
           const startPercentage = currentPercentage;
           const endPercentage = startPercentage + (task.percentage / 100);
@@ -187,15 +203,6 @@ export const CircleTimer = ({
             />
           );
         })}
-
-        {/* 진행률 표시 (파이 차트) */}
-        {isRunning && (
-          <path
-            d={getProgressArc(progress)}
-            fill="rgba(0, 0, 0, 0.2)"
-            stroke="none"
-          />
-        )}
       </svg>
 
       {/* 중앙 텍스트 */}
