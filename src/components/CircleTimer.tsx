@@ -9,6 +9,7 @@ interface CircleTimerProps {
   onTaskComplete: (taskId: string) => void;
   endTime: { hours: number; minutes: number };
   onTaskCountChange: (type: 'add' | 'remove') => void;
+  onTimeClick: (e: React.MouseEvent) => void;
 }
 
 export const CircleTimer = ({
@@ -17,10 +18,12 @@ export const CircleTimer = ({
   totalMinutes,
   onTaskComplete,
   endTime,
-  onTaskCountChange
+  onTaskCountChange,
+  onTimeClick
 }: CircleTimerProps) => {
   const [elapsedMinutes, setElapsedMinutes] = useState(0);
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [startTime, setStartTime] = useState<Date | null>(null);
   const size = 300;
   const strokeWidth = 30;
   const radius = (size - strokeWidth) / 2;
@@ -35,6 +38,16 @@ export const CircleTimer = ({
 
     return () => clearInterval(interval);
   }, []);
+
+  // 타이머 시작 시 시작 시각을 기록
+  useEffect(() => {
+    if (isRunning && !startTime) {
+      setStartTime(new Date());
+    }
+    if (!isRunning) {
+      setStartTime(null);
+    }
+  }, [isRunning]);
 
   useEffect(() => {
     if (!isRunning) {
@@ -55,6 +68,15 @@ export const CircleTimer = ({
   const formatTimeText = (hours: number, minutes: number) => {
     const parts = [];
     if (hours > 0) parts.push(`${hours}시`);
+    if (minutes > 0) parts.push(`${minutes}분`);
+    return parts.join(' ');
+  };
+
+  const formatTotalTime = (totalMinutes: number) => {
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    const parts = [];
+    if (hours > 0) parts.push(`${hours}시간`);
     if (minutes > 0) parts.push(`${minutes}분`);
     return parts.join(' ');
   };
@@ -86,14 +108,19 @@ export const CircleTimer = ({
     const startAngle = (startPercentage * 360) - 90;
     const endAngle = (endPercentage * 360) - 90;
     
+    // 작업 간 간격을 위한 조정 (각 작업 사이에 1도 간격)
+    const gap = 1; // 1도 간격
+    const adjustedStartAngle = startAngle + gap;
+    const adjustedEndAngle = endAngle - gap;
+    
     const start = {
-      x: center + radius * Math.cos((startAngle * Math.PI) / 180),
-      y: center + radius * Math.sin((startAngle * Math.PI) / 180)
+      x: center + radius * Math.cos((adjustedStartAngle * Math.PI) / 180),
+      y: center + radius * Math.sin((adjustedStartAngle * Math.PI) / 180)
     };
     
     const end = {
-      x: center + radius * Math.cos((endAngle * Math.PI) / 180),
-      y: center + radius * Math.sin((endAngle * Math.PI) / 180)
+      x: center + radius * Math.cos((adjustedEndAngle * Math.PI) / 180),
+      y: center + radius * Math.sin((adjustedEndAngle * Math.PI) / 180)
     };
     
     const largeArcFlag = endPercentage - startPercentage > 0.5 ? 1 : 0;
@@ -181,38 +208,24 @@ export const CircleTimer = ({
             </div>
           ) : (
             <div className="text-sm">
-              <div>시작시간: {formatTimeText(currentTime.getHours(), currentTime.getMinutes())}</div>
+              <div className="mb-2">
+                <button
+                  onClick={onTimeClick}
+                  className="text-2xl font-bold text-yellow-500 hover:text-yellow-600 border-b border-dashed border-yellow-400 hover:border-yellow-500 transition-colors"
+                >
+                  {formatTotalTime(totalMinutes)} 동안
+                </button>
+              </div>
+              {isRunning && startTime ? (
+                <div>시작시간: {formatTimeText(startTime.getHours(), startTime.getMinutes())}</div>
+              ) : (
+                <div>지금시간: {formatTimeText(currentTime.getHours(), currentTime.getMinutes())}</div>
+              )}
               <div>종료시간: {formatTimeText(endTime.hours, endTime.minutes)}</div>
             </div>
           )}
         </div>
       </div>
-
-      {/* 작업 개수 조절 버튼 */}
-      {!isRunning && (
-        <>
-          {/* 작업 제거 버튼 */}
-          <button
-            onClick={() => onTaskCountChange('remove')}
-            disabled={tasks.length <= 1}
-            className={`absolute left-4 -bottom-4 w-8 h-8 rounded-full flex items-center justify-center text-white text-lg font-bold transition-colors ${
-              tasks.length <= 1 ? 'bg-gray-300 cursor-not-allowed' : 'bg-blue-500 hover:bg-blue-600'
-            }`}
-            title="작업 제거"
-          >
-            -
-          </button>
-
-          {/* 작업 추가 버튼 */}
-          <button
-            onClick={() => onTaskCountChange('add')}
-            className="absolute right-4 -bottom-4 w-8 h-8 rounded-full bg-blue-500 hover:bg-blue-600 flex items-center justify-center text-white text-lg font-bold transition-colors"
-            title="작업 추가"
-          >
-            +
-          </button>
-        </>
-      )}
     </div>
   );
 }; 

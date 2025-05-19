@@ -4,11 +4,14 @@ import type { Task } from '../types/task';
 interface TaskFormProps {
   onTaskAdd: (task: Omit<Task, 'id' | 'duration'>) => void;
   totalMinutes: number;
+  taskCount?: number;
 }
 
-export const TaskForm = ({ onTaskAdd, totalMinutes }: TaskFormProps) => {
+export const TaskForm = ({ onTaskAdd, totalMinutes, taskCount = 0 }: TaskFormProps) => {
+  const defaultPercentage = taskCount > 0 ? Math.floor(100 / (taskCount + 1)) : 100;
   const [name, setName] = useState('');
-  const [percentage, setPercentage] = useState('');
+  const [percentage, setPercentage] = useState(String(defaultPercentage));
+  const placeholderName = `작업 ${taskCount + 1}`;
 
   const getRandomColor = useCallback(() => {
     const colors = [
@@ -24,23 +27,23 @@ export const TaskForm = ({ onTaskAdd, totalMinutes }: TaskFormProps) => {
 
   const handleSubmit = useCallback((e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !percentage) return;
+    const taskName = name.trim() === '' ? placeholderName : name;
+    const taskPercentage = percentage === '' ? defaultPercentage : Number(percentage);
 
-    const newPercentage = Number(percentage);
-    if (newPercentage <= 0 || newPercentage > 100) {
+    if (taskPercentage <= 0 || taskPercentage > 100) {
       alert('비율은 1~100 사이의 값이어야 합니다.');
       return;
     }
 
     onTaskAdd({
-      name,
-      percentage: newPercentage,
+      name: taskName,
+      percentage: taskPercentage,
       color: getRandomColor()
     });
 
     setName('');
-    setPercentage('');
-  }, [name, percentage, onTaskAdd, getRandomColor]);
+    setPercentage(String(defaultPercentage));
+  }, [name, percentage, onTaskAdd, getRandomColor, defaultPercentage, placeholderName]);
 
   const handleSave = useCallback(() => {
     onTaskAdd({ name: '', percentage: 0, color: '' });
@@ -53,8 +56,8 @@ export const TaskForm = ({ onTaskAdd, totalMinutes }: TaskFormProps) => {
           type="text"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="작업 이름"
-          className="flex-1 p-2 rounded border border-gray-300"
+          placeholder={placeholderName}
+          className="flex-1 p-2 rounded border border-gray-300 text-black"
         />
         <div className="relative flex items-center">
           <input
@@ -64,7 +67,7 @@ export const TaskForm = ({ onTaskAdd, totalMinutes }: TaskFormProps) => {
             placeholder="비율"
             min="1"
             max="100"
-            className="w-24 p-2 rounded border border-gray-300"
+            className="w-24 p-2 rounded border border-gray-300 text-black"
           />
           <span className="absolute right-3 text-gray-500">%</span>
         </div>
@@ -78,16 +81,9 @@ export const TaskForm = ({ onTaskAdd, totalMinutes }: TaskFormProps) => {
         <button
           type="submit"
           className="flex-1 bg-blue-500 text-white p-2 rounded hover:bg-blue-600 transition-colors"
-          disabled={!name || !percentage}
+          disabled={false}
         >
           작업 추가
-        </button>
-        <button
-          type="button"
-          onClick={handleSave}
-          className="px-4 py-2 rounded bg-green-500 text-white hover:bg-green-600 transition-colors"
-        >
-          저장
         </button>
       </div>
     </form>

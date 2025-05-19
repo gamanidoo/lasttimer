@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { TimeSelector } from '@/components/TimeSelector';
 import { CircleTimer } from '@/components/CircleTimer';
 import type { Task } from '@/types/task';
@@ -35,6 +35,8 @@ export default function Home() {
   const [isTimeSelectVisible, setIsTimeSelectVisible] = useState(false);
   const [isTaskFormVisible, setIsTaskFormVisible] = useState(false);
 
+  const timeSelectorRef = useRef<HTMLDivElement>(null);
+
   // 총 시간 계산 (분)
   const calculateTotalMinutes = () => {
     const now = new Date();
@@ -50,10 +52,23 @@ export default function Home() {
     return Math.floor((end.getTime() - now.getTime()) / (1000 * 60));
   };
 
-  const handleTimeClick = () => {
+  const handleTimeClick = (e: React.MouseEvent) => {
     if (isRunning) return;
+    e.stopPropagation(); // 이벤트 버블링 방지
     setIsTimeSelectVisible(true);
     setIsTaskFormVisible(false);
+  };
+
+  const handleOutsideClick = (e: React.MouseEvent) => {
+    if (
+      isTimeSelectVisible &&
+      timeSelectorRef.current &&
+      timeSelectorRef.current.contains(e.target as Node)
+    ) {
+      // TimeSelector 내부 클릭이면 닫지 않음
+      return;
+    }
+    setIsTimeSelectVisible(false);
   };
 
   const handleTaskClick = () => {
@@ -64,8 +79,6 @@ export default function Home() {
 
   const handleTimeSelect = (hours: number, minutes: number) => {
     setEndTime({ hours, minutes });
-    setIsTimeSelectVisible(false);
-    
     // 시간이 변경되면 작업 duration 업데이트
     const totalMinutes = calculateTotalMinutes();
     setTasks(tasks.map(task => ({
@@ -75,25 +88,50 @@ export default function Home() {
   };
 
   const handleTaskAdd = (newTask: Omit<Task, 'id' | 'duration'>) => {
-    // 빈 작업이 전달되면 폼을 닫음 (저장 버튼 클릭 시)
-    if (!newTask.name && newTask.percentage === 0) {
-      setIsTaskFormVisible(false);
-      return;
-    }
-
     const totalMinutes = calculateTotalMinutes();
-    const duration = Math.floor((newTask.percentage / 100) * totalMinutes);
-    
     const task: Task = {
       ...newTask,
       id: Math.random().toString(36).substr(2, 9),
-      duration,
+      isManual: false,
     };
-    setTasks([...tasks, task]);
+    const nextTasks = [...tasks, task];
+
+    // 1. 수동 비율 작업의 합
+    const manualTotal = nextTasks.filter(t => t.isManual).reduce((sum, t) => sum + t.percentage, 0);
+    // 2. 자동 분배 대상
+    const autoTasks = nextTasks.filter(t => !t.isManual);
+    const autoCount = autoTasks.length;
+    const remain = 100 - manualTotal;
+    const even = autoCount > 0 ? remain / autoCount : 0;
+
+    setTasks(
+      nextTasks.map(t => ({
+        ...t,
+        percentage: t.isManual ? t.percentage : even,
+        duration: Math.floor(((t.isManual ? t.percentage : even) / 100) * totalMinutes),
+      }))
+    );
   };
 
   const handleTaskDelete = (id: string) => {
-    setTasks(tasks.filter(task => task.id !== id));
+    // 삭제 후 남은 tasks의 isManual을 그대로 유지
+    const filtered = tasks.filter(task => task.id !== id);
+    const totalMinutes = calculateTotalMinutes();
+    // 1. 수동 비율 작업의 합
+    const manualTotal = filtered.filter(t => t.isManual).reduce((sum, t) => sum + t.percentage, 0);
+    // 2. 자동 분배 대상
+    const autoTasks = filtered.filter(t => !t.isManual);
+    const autoCount = autoTasks.length;
+    const remain = 100 - manualTotal;
+    const even = autoCount > 0 ? remain / autoCount : 0;
+
+    setTasks(
+      filtered.map(t => ({
+        ...t,
+        percentage: t.isManual ? t.percentage : even,
+        duration: Math.floor(((t.isManual ? t.percentage : even) / 100) * totalMinutes),
+      }))
+    );
   };
 
   const handleTaskComplete = (taskId: string) => {
@@ -192,6 +230,51 @@ export default function Home() {
     return colors[Math.floor(Math.random() * colors.length)];
   };
 
+  // TaskList에서 작업 이름/비율 수정 시 호출
+  const handleTaskUpdate = (id: string, updates: Partial<Pick<Task, 'name' | 'percentage'>>) => {
+    setTasks(prevTasks => {
+      const totalMinutes = calculateTotalMinutes();
+      // 1. 비율을 직접 수정한 Task는 isManual true로 설정
+      let nextTasks = prevTasks.map(task => {
+        if (task.id === id && updates.percentage !== undefined) {
+          return {
+            ...task,
+            ...updates,
+            isManual: true // 수동조정 표시
+          };
+        } else if (task.id === id && updates.name !== undefined) {
+          return {
+            ...task,
+            ...updates
+          };
+        }
+        return task;
+      });
+      // 2. 수동조정된 Task의 비율 합
+      const manualTotal = nextTasks.filter(t => t.isManual).reduce((sum, t) => sum + t.percentage, 0);
+      // 3. 자동조정 대상 Task
+      const autoTasks = nextTasks.filter(t => !t.isManual);
+      const autoCount = autoTasks.length;
+      const remain = 100 - manualTotal;
+      // 4. 자동조정 Task에 남은 비율 균등 분배
+      nextTasks = nextTasks.map(task => {
+        if (!task.isManual) {
+          const even = autoCount > 0 ? remain / autoCount : 0;
+          return {
+            ...task,
+            percentage: even
+          };
+        }
+        return task;
+      });
+      // 5. duration 재계산
+      return nextTasks.map(task => ({
+        ...task,
+        duration: Math.floor((task.percentage / 100) * totalMinutes)
+      }));
+    });
+  };
+
   useEffect(() => {
     // isRunning 상태를 body의 dataset에 저장
     document.body.dataset.isRunning = isRunning.toString();
@@ -201,7 +284,7 @@ export default function Home() {
   }, [isRunning]);
 
   return (
-    <main className="container mx-auto max-w-2xl p-4">
+    <main className="container mx-auto max-w-2xl p-4" onClick={handleOutsideClick}>
       <h1 className="text-3xl font-bold text-center mb-8">⏱️ 시간분배 타이머</h1>
       
       <div className="flex justify-center mb-8">
@@ -212,6 +295,7 @@ export default function Home() {
           onTaskComplete={handleTaskComplete}
           endTime={endTime}
           onTaskCountChange={handleTaskCountChange}
+          onTimeClick={handleTimeClick}
         />
       </div>
 
@@ -224,18 +308,25 @@ export default function Home() {
         onTimeClick={handleTimeClick}
         onTaskClick={handleTaskClick}
         onReset={handleReset}
+        onTaskCountChange={handleTaskCountChange}
       />
       
       {isTimeSelectVisible && !isRunning && (
-        <div className="mb-8 bg-white rounded-lg shadow-lg">
-          <TimeSelector onTimeSelect={handleTimeSelect} />
+        <div
+          ref={timeSelectorRef}
+          className="mb-8 bg-white rounded-lg shadow-lg time-selector"
+        >
+          <TimeSelector 
+            onTimeSelect={handleTimeSelect} 
+            initialTime={endTime}
+          />
         </div>
       )}
       
       {isTaskFormVisible && !isRunning && (
         <div className="mb-8 bg-white rounded-lg shadow-lg">
-          <TaskForm onTaskAdd={handleTaskAdd} totalMinutes={totalMinutes} />
-          <TaskList tasks={tasks} onTaskDelete={handleTaskDelete} />
+          <TaskForm onTaskAdd={handleTaskAdd} totalMinutes={totalMinutes} taskCount={tasks.length} />
+          <TaskList tasks={tasks} onTaskDelete={handleTaskDelete} onTaskUpdate={handleTaskUpdate} />
         </div>
       )}
 

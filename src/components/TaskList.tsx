@@ -3,9 +3,10 @@ import type { Task } from '../types/task';
 interface TaskListProps {
   tasks: Task[];
   onTaskDelete: (id: string) => void;
+  onTaskUpdate: (id: string, updates: Partial<Pick<Task, 'name' | 'percentage'>>) => void;
 }
 
-export const TaskList = ({ tasks, onTaskDelete }: TaskListProps) => {
+export const TaskList = ({ tasks, onTaskDelete, onTaskUpdate }: TaskListProps) => {
   return (
     <div className="space-y-2 p-4">
       {tasks.map((task) => (
@@ -18,10 +19,21 @@ export const TaskList = ({ tasks, onTaskDelete }: TaskListProps) => {
               className="w-4 h-4 rounded-full"
               style={{ backgroundColor: task.color }}
             />
-            <span className="font-medium">{task.name}</span>
-            <span className="text-sm text-gray-500">
-              {task.percentage}% ({task.duration}분)
-            </span>
+            <input
+              type="text"
+              value={task.name}
+              onChange={e => onTaskUpdate(task.id, { name: e.target.value })}
+              className="font-medium border-b border-gray-300 focus:border-blue-500 outline-none bg-transparent w-24"
+            />
+            <input
+              type="number"
+              value={task.percentage}
+              min={1}
+              max={100}
+              onChange={e => onTaskUpdate(task.id, { percentage: Number(e.target.value) })}
+              className="w-16 text-sm text-gray-700 border-b border-gray-300 focus:border-blue-500 outline-none bg-transparent text-right"
+            />
+            <span className="text-sm text-gray-500">% ({task.duration}분)</span>
           </div>
           <button
             onClick={() => onTaskDelete(task.id)}

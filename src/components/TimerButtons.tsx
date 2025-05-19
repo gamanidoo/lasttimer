@@ -30,13 +30,11 @@ export const TimerButtons = ({
         <button
           onClick={onStart}
           disabled={!canStart}
-          className={`flex-1 py-2 px-4 rounded-lg font-medium transition-colors ${
-            !canStart
-              ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-              : 'bg-blue-500 text-white hover:bg-blue-600'
+          className={`w-full py-4 rounded-lg text-white text-lg font-medium transition-colors ${
+            canStart ? 'bg-blue-500 hover:bg-blue-600' : 'bg-gray-300 cursor-not-allowed'
           }`}
         >
-          시작
+          시작하기
         </button>
       )}
       {(isRunning || isComplete) && (

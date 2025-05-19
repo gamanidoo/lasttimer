@@ -77,97 +77,100 @@ export const TimeSelector = ({ onTimeSelect, initialTime }: TimeSelectorProps) =
     setSelectedTime(newSelectedTime);
   }, [currentTime]);
 
-  const handleSave = useCallback(() => {
-    onTimeSelect(selectedTime.hours, selectedTime.minutes);
-  }, [selectedTime, onTimeSelect]);
+  // 시간/분 변경 시 onTimeSelect를 즉시 호출
+  const handleHourChange = (hours: number) => {
+    setSelectedTime(prev => {
+      const updated = { hours, minutes: prev.minutes };
+      onTimeSelect(updated.hours, updated.minutes);
+      return updated;
+    });
+  };
+  const handleMinuteChange = (minutes: number) => {
+    setSelectedTime(prev => {
+      const updated = { hours: prev.hours, minutes };
+      onTimeSelect(updated.hours, updated.minutes);
+      return updated;
+    });
+  };
 
   const totalTime = calculateTotalTime();
 
   return (
-    <div className="p-4 space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="text-black font-medium">
-          현재 시각: {format(currentTime, 'HH:mm')}
-        </div>
-
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <select
-              value={selectedTime.hours}
-              onChange={(e) => {
-                const newHours = parseInt(e.target.value);
-                adjustTime(newHours - selectedTime.hours, 0);
-              }}
-              className="p-2 rounded border border-gray-300 text-black"
-            >
-              {Array.from({ length: 24 }, (_, i) => (
-                <option key={i} value={i}>
-                  {i.toString().padStart(2, '0')}
-                </option>
-              ))}
-            </select>
-            <span className="text-lg text-black font-medium">:</span>
-            <select
-              value={selectedTime.minutes}
-              onChange={(e) => {
-                const newMinutes = parseInt(e.target.value);
-                adjustTime(0, newMinutes - selectedTime.minutes);
-              }}
-              className="p-2 rounded border border-gray-300 text-black"
-            >
-              {Array.from({ length: 60 }, (_, i) => (
-                <option key={i} value={i}>
-                  {i.toString().padStart(2, '0')}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="text-black font-medium whitespace-nowrap">
-            (총 {totalTime.hours > 0 ? `${totalTime.hours}시간 ` : ''}{totalTime.minutes}분)
-          </div>
+    <div className="p-6 bg-white rounded-lg shadow-lg">
+      <div className="flex items-center justify-between mb-6">
+        <span className="text-xl font-medium text-gray-700">종료 시간</span>
+        <div className="flex gap-3">
+          <select
+            value={selectedTime.hours}
+            onChange={(e) => handleHourChange(Number(e.target.value))}
+            className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-lg text-black"
+          >
+            {Array.from({ length: 24 }, (_, i) => (
+              <option key={i} value={i}>
+                {String(i).padStart(2, '0')}시
+              </option>
+            ))}
+          </select>
+          <select
+            value={selectedTime.minutes}
+            onChange={(e) => handleMinuteChange(Number(e.target.value))}
+            className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-lg text-black"
+          >
+            {Array.from({ length: 12 }, (_, i) => (
+              <option key={i} value={i * 5}>
+                {String(i * 5).padStart(2, '0')}분
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-2 justify-center">
+      <div className="flex flex-wrap gap-3 justify-center">
         <button
-          onClick={resetTime}
-          className="px-3 py-1 rounded bg-blue-500 text-white hover:bg-blue-600 transition-colors"
+          onClick={() => {
+            const defaultTime = addHours(new Date(), 1);
+            setSelectedTime({ hours: defaultTime.getHours(), minutes: defaultTime.getMinutes() });
+            onTimeSelect(defaultTime.getHours(), defaultTime.getMinutes());
+          }}
+          className="px-4 py-2 rounded-lg bg-yellow-500 text-white hover:bg-yellow-600 transition-colors"
         >
           초기화
         </button>
         <button
           onClick={() => adjustTime(-1, 0)}
-          className="px-3 py-1 rounded bg-blue-500 text-white hover:bg-blue-600 transition-colors"
+          className="px-4 py-2 rounded-lg bg-yellow-500 text-white hover:bg-yellow-600 transition-colors"
         >
           -1시간
         </button>
         <button
           onClick={() => adjustTime(1, 0)}
-          className="px-3 py-1 rounded bg-blue-500 text-white hover:bg-blue-600 transition-colors"
+          className="px-4 py-2 rounded-lg bg-yellow-500 text-white hover:bg-yellow-600 transition-colors"
         >
           +1시간
         </button>
         <button
           onClick={() => adjustTime(0, -10)}
-          className="px-3 py-1 rounded bg-blue-500 text-white hover:bg-blue-600 transition-colors"
+          className="px-4 py-2 rounded-lg bg-yellow-500 text-white hover:bg-yellow-600 transition-colors"
         >
           -10분
         </button>
         <button
           onClick={() => adjustTime(0, 10)}
-          className="px-3 py-1 rounded bg-blue-500 text-white hover:bg-blue-600 transition-colors"
+          className="px-4 py-2 rounded-lg bg-yellow-500 text-white hover:bg-yellow-600 transition-colors"
         >
           +10분
         </button>
-      </div>
-
-      <div className="flex justify-center">
         <button
-          onClick={handleSave}
-          className="w-full max-w-md px-4 py-2 rounded bg-green-500 text-white hover:bg-green-600 transition-colors font-medium"
+          onClick={() => adjustTime(0, -1)}
+          className="px-4 py-2 rounded-lg bg-yellow-400 text-white hover:bg-yellow-500 transition-colors"
         >
-          저장
+          -1분
+        </button>
+        <button
+          onClick={() => adjustTime(0, 1)}
+          className="px-4 py-2 rounded-lg bg-yellow-400 text-white hover:bg-yellow-500 transition-colors"
+        >
+          +1분
         </button>
       </div>
     </div>

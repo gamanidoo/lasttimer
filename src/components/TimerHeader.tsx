@@ -4,9 +4,10 @@ interface TimerHeaderProps {
   isRunning: boolean;
   isComplete: boolean;
   totalMinutes: number;
-  onTimeClick: () => void;
+  onTimeClick: (e: React.MouseEvent) => void;
   onTaskClick: () => void;
   onReset: () => void;
+  onTaskCountChange: (type: 'add' | 'remove') => void;
 }
 
 export const TimerHeader = ({
@@ -17,7 +18,8 @@ export const TimerHeader = ({
   totalMinutes,
   onTimeClick,
   onTaskClick,
-  onReset
+  onReset,
+  onTaskCountChange
 }: TimerHeaderProps) => {
   const formatDuration = (minutes: number) => {
     const hours = Math.floor(minutes / 60);
@@ -59,23 +61,43 @@ export const TimerHeader = ({
 
   return (
     <div className="text-center mb-8">
-      <h2 className="text-2xl">
-        <button
-          onClick={onTimeClick}
-          className="font-bold underline decoration-dotted underline-offset-4 hover:text-blue-600"
-        >
-          {endTime ? formatDuration(totalMinutes) : '시간'}
-        </button>
-        을
-        <br />
-        <button
-          onClick={onTaskClick}
-          className="font-bold underline decoration-dotted underline-offset-4 hover:text-blue-600"
-        >
-          {taskCount}개
-        </button>
-        로 나눠서 집중할게요
-      </h2>
+      <div className="flex items-center justify-center gap-6">
+        {!isRunning && !isComplete && (
+          <>
+            <button
+              onClick={() => onTaskCountChange('remove')}
+              disabled={taskCount <= 1}
+              className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-lg font-bold transition-colors ${
+                taskCount <= 1 ? 'bg-gray-300 cursor-not-allowed' : 'bg-blue-500 hover:bg-blue-600'
+              }`}
+              title="작업 제거"
+            >
+              -
+            </button>
+            <button
+              onClick={onTaskClick}
+              className="text-2xl font-bold underline decoration-dotted underline-offset-4 hover:text-blue-600 px-4"
+            >
+              {taskCount}개 작업 집중
+            </button>
+            <button
+              onClick={() => onTaskCountChange('add')}
+              className="w-8 h-8 rounded-full bg-blue-500 hover:bg-blue-600 flex items-center justify-center text-white text-lg font-bold transition-colors"
+              title="작업 추가"
+            >
+              +
+            </button>
+          </>
+        )}
+        {isRunning && !isComplete && (
+          <button
+            onClick={onTaskClick}
+            className="text-2xl font-bold underline decoration-dotted underline-offset-4 hover:text-blue-600"
+          >
+            {taskCount}개 작업 집중
+          </button>
+        )}
+      </div>
     </div>
   );
 }; 
