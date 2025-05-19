@@ -1,103 +1,257 @@
-import Image from "next/image";
+'use client';
+
+import { useState, useEffect } from 'react';
+import { TimeSelector } from '@/components/TimeSelector';
+import { CircleTimer } from '@/components/CircleTimer';
+import type { Task } from '@/types/task';
+import { NotificationManager } from '@/components/NotificationManager';
+import { TaskForm } from '@/components/TaskForm';
+import { TaskList } from '@/components/TaskList';
+import { TimerButtons } from '@/components/TimerButtons';
+import { TimerHeader } from '@/components/TimerHeader';
+import { addHours } from 'date-fns';
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  // 초기 시간 설정
+  const [endTime, setEndTime] = useState<{ hours: number; minutes: number }>(() => {
+    const defaultTime = addHours(new Date(), 1);
+    return {
+      hours: defaultTime.getHours(),
+      minutes: defaultTime.getMinutes()
+    };
+  });
+  
+  // 기본 작업 설정
+  const [tasks, setTasks] = useState<Task[]>(() => [
+    { name: '작업 1', percentage: 33.33, color: '#FF6B6B', id: '1', duration: 20 },
+    { name: '작업 2', percentage: 33.33, color: '#4ECDC4', id: '2', duration: 20 },
+    { name: '작업 3', percentage: 33.34, color: '#45B7D1', id: '3', duration: 20 }
+  ]);
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+  const [isRunning, setIsRunning] = useState(false);
+  const [isComplete, setIsComplete] = useState(false);
+  const [hasNotificationPermission, setHasNotificationPermission] = useState(false);
+  const [currentTaskId, setCurrentTaskId] = useState<string | null>(null);
+  const [isTimeSelectVisible, setIsTimeSelectVisible] = useState(false);
+  const [isTaskFormVisible, setIsTaskFormVisible] = useState(false);
+
+  // 총 시간 계산 (분)
+  const calculateTotalMinutes = () => {
+    const now = new Date();
+    const end = new Date();
+    end.setHours(endTime.hours);
+    end.setMinutes(endTime.minutes);
+    
+    // 종료 시각이 현재보다 이전이면 다음 날로 설정
+    if (end < now) {
+      end.setDate(end.getDate() + 1);
+    }
+    
+    return Math.floor((end.getTime() - now.getTime()) / (1000 * 60));
+  };
+
+  const handleTimeClick = () => {
+    if (isRunning) return;
+    setIsTimeSelectVisible(true);
+    setIsTaskFormVisible(false);
+  };
+
+  const handleTaskClick = () => {
+    if (isRunning) return;
+    setIsTaskFormVisible(true);
+    setIsTimeSelectVisible(false);
+  };
+
+  const handleTimeSelect = (hours: number, minutes: number) => {
+    setEndTime({ hours, minutes });
+    setIsTimeSelectVisible(false);
+    
+    // 시간이 변경되면 작업 duration 업데이트
+    const totalMinutes = calculateTotalMinutes();
+    setTasks(tasks.map(task => ({
+      ...task,
+      duration: Math.floor((task.percentage / 100) * totalMinutes)
+    })));
+  };
+
+  const handleTaskAdd = (newTask: Omit<Task, 'id' | 'duration'>) => {
+    // 빈 작업이 전달되면 폼을 닫음 (저장 버튼 클릭 시)
+    if (!newTask.name && newTask.percentage === 0) {
+      setIsTaskFormVisible(false);
+      return;
+    }
+
+    const totalMinutes = calculateTotalMinutes();
+    const duration = Math.floor((newTask.percentage / 100) * totalMinutes);
+    
+    const task: Task = {
+      ...newTask,
+      id: Math.random().toString(36).substr(2, 9),
+      duration,
+    };
+    setTasks([...tasks, task]);
+  };
+
+  const handleTaskDelete = (id: string) => {
+    setTasks(tasks.filter(task => task.id !== id));
+  };
+
+  const handleTaskComplete = (taskId: string) => {
+    if (hasNotificationPermission) {
+      const task = tasks.find(t => t.id === taskId);
+      if (task) {
+        new Notification('작업 전환', {
+          body: `${task.name} 작업이 완료되었습니다.`,
+        });
+      }
+    }
+
+    const nextTaskIndex = tasks.findIndex(t => t.id === taskId) + 1;
+    if (nextTaskIndex >= tasks.length) {
+      setIsComplete(true);
+    } else {
+      setCurrentTaskId(tasks[nextTaskIndex].id);
+    }
+  };
+
+  const handleStart = () => {
+    const totalMinutes = calculateTotalMinutes();
+    setTasks(tasks.map(task => ({
+      ...task,
+      duration: Math.floor((task.percentage / 100) * totalMinutes),
+    })));
+    setIsRunning(true);
+    setCurrentTaskId(tasks[0]?.id || null);
+    setIsTimeSelectVisible(false);
+    setIsTaskFormVisible(false);
+  };
+
+  const handleReset = () => {
+    const defaultTime = addHours(new Date(), 1);
+    setIsRunning(false);
+    setIsComplete(false);
+    setEndTime({
+      hours: defaultTime.getHours(),
+      minutes: defaultTime.getMinutes()
+    });
+    setTasks([]);
+    setCurrentTaskId(null);
+    setIsTimeSelectVisible(false);
+    setIsTaskFormVisible(false);
+  };
+
+  const canStart = Boolean(tasks.length > 0);
+  const totalMinutes = calculateTotalMinutes();
+
+  const handleTaskCountChange = (type: 'add' | 'remove') => {
+    if (type === 'add') {
+      const newTaskNumber = tasks.length + 1;
+      const newPercentage = 100 / newTaskNumber;
+      const totalMinutes = calculateTotalMinutes();
+      
+      // 기존 작업들의 비율 조정
+      const updatedTasks = tasks.map(task => ({
+        ...task,
+        percentage: newPercentage,
+        duration: Math.floor((newPercentage / 100) * totalMinutes)
+      }));
+
+      // 새 작업 추가
+      const newTask = {
+        name: `작업 ${newTaskNumber}`,
+        percentage: newPercentage,
+        color: getRandomColor(),
+        id: Math.random().toString(36).substr(2, 9),
+        duration: Math.floor((newPercentage / 100) * totalMinutes)
+      };
+
+      setTasks([...updatedTasks, newTask]);
+    } else {
+      if (tasks.length <= 1) return;
+
+      const newTaskNumber = tasks.length - 1;
+      const newPercentage = 100 / newTaskNumber;
+      const totalMinutes = calculateTotalMinutes();
+
+      // 마지막 작업을 제외하고 나머지 작업들의 비율 조정
+      const updatedTasks = tasks.slice(0, -1).map(task => ({
+        ...task,
+        percentage: newPercentage,
+        duration: Math.floor((newPercentage / 100) * totalMinutes)
+      }));
+
+      setTasks(updatedTasks);
+    }
+  };
+
+  const getRandomColor = () => {
+    const colors = [
+      '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4',
+      '#FFEEAD', '#D4A5A5', '#9B59B6', '#3498DB'
+    ];
+    return colors[Math.floor(Math.random() * colors.length)];
+  };
+
+  useEffect(() => {
+    // isRunning 상태를 body의 dataset에 저장
+    document.body.dataset.isRunning = isRunning.toString();
+    return () => {
+      delete document.body.dataset.isRunning;
+    };
+  }, [isRunning]);
+
+  return (
+    <main className="container mx-auto max-w-2xl p-4">
+      <h1 className="text-3xl font-bold text-center mb-8">⏱️ 시간분배 타이머</h1>
+      
+      <div className="flex justify-center mb-8">
+        <CircleTimer
+          tasks={tasks}
+          isRunning={isRunning}
+          totalMinutes={totalMinutes}
+          onTaskComplete={handleTaskComplete}
+          endTime={endTime}
+          onTaskCountChange={handleTaskCountChange}
+        />
+      </div>
+
+      <TimerHeader
+        endTime={endTime}
+        taskCount={tasks.length}
+        isRunning={isRunning}
+        isComplete={isComplete}
+        totalMinutes={totalMinutes}
+        onTimeClick={handleTimeClick}
+        onTaskClick={handleTaskClick}
+        onReset={handleReset}
+      />
+      
+      {isTimeSelectVisible && !isRunning && (
+        <div className="mb-8 bg-white rounded-lg shadow-lg">
+          <TimeSelector onTimeSelect={handleTimeSelect} />
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
+      )}
+      
+      {isTaskFormVisible && !isRunning && (
+        <div className="mb-8 bg-white rounded-lg shadow-lg">
+          <TaskForm onTaskAdd={handleTaskAdd} totalMinutes={totalMinutes} />
+          <TaskList tasks={tasks} onTaskDelete={handleTaskDelete} />
+        </div>
+      )}
+
+      {!isComplete && (
+        <TimerButtons
+          isRunning={isRunning}
+          canStart={canStart}
+          isComplete={isComplete}
+          onStart={handleStart}
+          onReset={handleReset}
+        />
+      )}
+
+      <NotificationManager
+        onPermissionChange={setHasNotificationPermission}
+      />
+    </main>
   );
 }
