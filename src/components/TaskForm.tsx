@@ -11,6 +11,8 @@ export const TaskForm = ({ onTaskAdd, totalMinutes, taskCount = 0 }: TaskFormPro
   const defaultPercentage = taskCount > 0 ? Math.floor(100 / (taskCount + 1)) : 100;
   const [name, setName] = useState('');
   const [percentage, setPercentage] = useState(String(defaultPercentage));
+  const [minutes, setMinutes] = useState('');
+  const [inputMode, setInputMode] = useState<'percentage' | 'minutes'>('percentage');
   const placeholderName = `작업 ${taskCount + 1}`;
 
   const getRandomColor = useCallback(() => {
@@ -25,25 +27,43 @@ export const TaskForm = ({ onTaskAdd, totalMinutes, taskCount = 0 }: TaskFormPro
     return Math.floor((percentage / 100) * totalMinutes);
   }, [totalMinutes]);
 
+  const calculatePercentage = useCallback((minutes: number) => {
+    return Math.floor((minutes / totalMinutes) * 100);
+  }, [totalMinutes]);
+
   const handleSubmit = useCallback((e: React.FormEvent) => {
     e.preventDefault();
     const taskName = name.trim() === '' ? placeholderName : name;
-    const taskPercentage = percentage === '' ? defaultPercentage : Number(percentage);
-
-    if (taskPercentage <= 0 || taskPercentage > 100) {
-      alert('비율은 1~100 사이의 값이어야 합니다.');
-      return;
+    
+    if (inputMode === 'percentage') {
+      const taskPercentage = percentage === '' ? defaultPercentage : Number(percentage);
+      if (taskPercentage <= 0 || taskPercentage > 100) {
+        alert('비율은 1~100 사이의 값이어야 합니다.');
+        return;
+      }
+      onTaskAdd({
+        name: taskName,
+        percentage: taskPercentage,
+        color: getRandomColor()
+      });
+    } else {
+      const taskMinutes = minutes === '' ? 0 : Number(minutes);
+      if (taskMinutes <= 0 || taskMinutes > totalMinutes) {
+        alert(`시간은 1~${totalMinutes} 사이의 값이어야 합니다.`);
+        return;
+      }
+      onTaskAdd({
+        name: taskName,
+        minutes: taskMinutes,
+        percentage: calculatePercentage(taskMinutes),
+        color: getRandomColor()
+      });
     }
-
-    onTaskAdd({
-      name: taskName,
-      percentage: taskPercentage,
-      color: getRandomColor()
-    });
 
     setName('');
     setPercentage(String(defaultPercentage));
-  }, [name, percentage, onTaskAdd, getRandomColor, defaultPercentage, placeholderName]);
+    setMinutes('');
+  }, [name, percentage, minutes, inputMode, onTaskAdd, getRandomColor, defaultPercentage, placeholderName, totalMinutes, calculatePercentage]);
 
   const handleSave = useCallback(() => { // eslint-disable-line @typescript-eslint/no-unused-vars
     onTaskAdd({ name: '', percentage: 0, color: '' });
@@ -59,22 +79,51 @@ export const TaskForm = ({ onTaskAdd, totalMinutes, taskCount = 0 }: TaskFormPro
           placeholder={placeholderName}
           className="flex-1 p-2 rounded border border-gray-300 text-black"
         />
-        <div className="relative flex items-center">
-          <input
-            type="number"
-            value={percentage}
-            onChange={(e) => setPercentage(e.target.value)}
-            placeholder="비율"
-            min="1"
-            max="100"
-            className="w-24 p-2 rounded border border-gray-300 text-black"
-          />
-          <span className="absolute right-3 text-gray-500">%</span>
+        <div className="relative flex items-center gap-2">
+          <select
+            value={inputMode}
+            onChange={(e) => setInputMode(e.target.value as 'percentage' | 'minutes')}
+            className="p-2 rounded border border-gray-300 text-black"
+          >
+            <option value="percentage">비율</option>
+            <option value="minutes">시간</option>
+          </select>
+          {inputMode === 'percentage' ? (
+            <div className="relative flex items-center">
+              <input
+                type="number"
+                value={percentage}
+                onChange={(e) => setPercentage(e.target.value)}
+                placeholder="비율"
+                min="1"
+                max="100"
+                className="w-24 p-2 rounded border border-gray-300 text-black"
+              />
+              <span className="absolute right-3 text-gray-500">%</span>
+            </div>
+          ) : (
+            <div className="relative flex items-center">
+              <input
+                type="number"
+                value={minutes}
+                onChange={(e) => setMinutes(e.target.value)}
+                placeholder="시간"
+                min="1"
+                max={totalMinutes}
+                className="w-24 p-2 rounded border border-gray-300 text-black"
+              />
+              <span className="absolute right-3 text-gray-500">분</span>
+            </div>
+          )}
         </div>
       </div>
-      {totalMinutes > 0 && percentage && (
+      {totalMinutes > 0 && (
         <div className="text-sm text-gray-500">
-          ≈ {calculateDuration(Number(percentage))}분
+          {inputMode === 'percentage' && percentage ? (
+            `≈ ${calculateDuration(Number(percentage))}분`
+          ) : inputMode === 'minutes' && minutes ? (
+            `≈ ${calculatePercentage(Number(minutes))}%`
+          ) : null}
         </div>
       )}
       <div className="flex gap-2">

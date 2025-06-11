@@ -8,6 +8,7 @@ interface TimerHeaderProps {
   onTaskClick: () => void;
   onReset: () => void;
   onTaskCountChange: (type: 'add' | 'remove') => void;
+  startTime?: Date | null;
 }
 
 export const TimerHeader = ({
@@ -16,10 +17,11 @@ export const TimerHeader = ({
   isRunning,
   isComplete,
   totalMinutes,
-  onTimeClick, // eslint-disable-line @typescript-eslint/no-unused-vars
+  onTimeClick,
   onTaskClick,
   onReset,
-  onTaskCountChange
+  onTaskCountChange,
+  startTime
 }: TimerHeaderProps) => {
   const formatDuration = (minutes: number) => {
     const hours = Math.floor(minutes / 60);
@@ -30,10 +32,22 @@ export const TimerHeader = ({
     return `${mins}분`;
   };
 
+  const formatTime = (time: Date | { hours: number; minutes: number }) => {
+    const hours = 'getHours' in time ? time.getHours() : time.hours;
+    const minutes = 'getMinutes' in time ? time.getMinutes() : time.minutes;
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+  };
+
   if (isComplete) {
     return (
       <div className="text-center mb-8">
-        <h2 className="text-2xl font-bold mb-4">수고하셨습니다! 🎉</h2>
+        <h2 className="text-2xl font-bold mb-2">수고하셨습니다! 🎉</h2>
+        {startTime && endTime && (
+          <div className="text-lg mb-4">
+            <div>{formatTime(startTime)}~{formatTime(endTime)}</div>
+            <div className="font-bold">{formatDuration(totalMinutes)} 집중 완료!</div>
+          </div>
+        )}
         <button
           onClick={onReset}
           className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition-colors"
@@ -44,14 +58,14 @@ export const TimerHeader = ({
     );
   }
 
-  if (isRunning && endTime) {
-    const endTimeStr = `${endTime.hours.toString().padStart(2, '0')}:${endTime.minutes.toString().padStart(2, '0')}`;
+  if (isRunning && endTime && startTime) {
     const durationStr = formatDuration(totalMinutes);
+    const timeRangeStr = `${formatTime(startTime)}~${formatTime(endTime)}`;
 
     return (
       <div className="text-center mb-8">
         <h2 className="text-2xl">
-          <span className="font-bold">{endTimeStr}</span>까지
+          <span className="font-bold">{timeRangeStr}</span>
           <br />
           <span className="font-bold">{durationStr}</span> 집중해요
         </h2>

@@ -21,6 +21,8 @@ export default function Home() {
     };
   });
   
+  const [startTime, setStartTime] = useState<Date | null>(null);
+  
   // 기본 작업 설정
   const [tasks, setTasks] = useState<Task[]>(() => [
     { name: '작업 1', percentage: 33.33, color: '#FF6B6B', id: '1', duration: 20 },
@@ -143,11 +145,11 @@ export default function Home() {
         });
       }
     }
-    
 
     const nextTaskIndex = tasks.findIndex(t => t.id === taskId) + 1;
     if (nextTaskIndex >= tasks.length) {
       setIsComplete(true);
+      setIsRunning(false); // 타이머 중지
     } else {
       setCurrentTaskId(tasks[nextTaskIndex].id);
     }
@@ -160,6 +162,7 @@ export default function Home() {
       duration: Math.floor((task.percentage / 100) * totalMinutes),
     })));
     setIsRunning(true);
+    setStartTime(new Date());
     setCurrentTaskId(tasks[0]?.id || null);
     setIsTimeSelectVisible(false);
     setIsTaskFormVisible(false);
@@ -173,6 +176,7 @@ export default function Home() {
       hours: defaultTime.getHours(),
       minutes: defaultTime.getMinutes()
     });
+    setStartTime(null);
     setTasks([]);
     setCurrentTaskId(null);
     setIsTimeSelectVisible(false);
@@ -313,6 +317,7 @@ export default function Home() {
         onTaskClick={handleTaskClick}
         onReset={handleReset}
         onTaskCountChange={handleTaskCountChange}
+        startTime={startTime}
       />
       
       {isTimeSelectVisible && !isRunning && (
@@ -330,7 +335,12 @@ export default function Home() {
       {isTaskFormVisible && !isRunning && (
         <div className="mb-8 bg-white rounded-lg shadow-lg">
           <TaskForm onTaskAdd={handleTaskAdd} totalMinutes={totalMinutes} taskCount={tasks.length} />
-          <TaskList tasks={tasks} onTaskDelete={handleTaskDelete} onTaskUpdate={handleTaskUpdate} />
+          <TaskList 
+            tasks={tasks} 
+            onTaskDelete={handleTaskDelete} 
+            onTaskUpdate={handleTaskUpdate}
+            totalMinutes={totalMinutes}
+          />
         </div>
       )}
 
