@@ -4,7 +4,6 @@ interface TimerHeaderProps {
   isRunning: boolean;
   isComplete: boolean;
   totalMinutes: number;
-  onTimeClick: (e: React.MouseEvent) => void;
   onTaskClick: () => void;
   onReset: () => void;
   onTaskCountChange: (type: 'add' | 'remove') => void;
@@ -17,7 +16,6 @@ export const TimerHeader = ({
   isRunning,
   isComplete,
   totalMinutes,
-  onTimeClick,
   onTaskClick,
   onReset,
   onTaskCountChange,
@@ -38,6 +36,24 @@ export const TimerHeader = ({
     return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
   };
 
+  const getDurationText = () => {
+    if (startTime && endTime) {
+      const start = new Date(startTime);
+      const end = new Date();
+      end.setHours(endTime.hours);
+      end.setMinutes(endTime.minutes);
+      end.setSeconds(0);
+      let diff = Math.round((end.getTime() - start.getTime()) / 60000); // 분 단위
+      if (diff < 0) diff += 24 * 60; // 자정 넘김 보정
+      const hours = Math.floor(diff / 60);
+      const minutes = diff % 60;
+      if (hours > 0 && minutes > 0) return `${hours}시간 ${minutes}분`;
+      if (hours > 0) return `${hours}시간`;
+      return `${minutes}분`;
+    }
+    return '';
+  };
+
   if (isComplete) {
     return (
       <div className="text-center mb-8">
@@ -45,7 +61,7 @@ export const TimerHeader = ({
         {startTime && endTime && (
           <div className="text-lg mb-4">
             <div>{formatTime(startTime)}~{formatTime(endTime)}</div>
-            <div className="font-bold">{formatDuration(totalMinutes)} 집중 완료!</div>
+            <div className="font-bold">{getDurationText()} 집중 완료!</div>
           </div>
         )}
         <button

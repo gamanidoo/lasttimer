@@ -3,13 +3,18 @@
 import { useState, useEffect, useRef } from 'react';
 import { TimeSelector } from '@/components/TimeSelector';
 import { CircleTimer } from '@/components/CircleTimer';
-import type { Task } from '@/types/task';
+import type { Task, TimerSet } from '@/types/task';
 import { NotificationManager } from '@/components/NotificationManager';
 import { TaskForm } from '@/components/TaskForm';
 import { TaskList } from '@/components/TaskList';
 import { TimerButtons } from '@/components/TimerButtons';
 import { TimerHeader } from '@/components/TimerHeader';
+import { SavedSets } from '@/components/SavedSets';
+import { SaveSetForm } from '@/components/SaveSetForm';
 import { addHours } from 'date-fns';
+
+// 더 다양한 고채도/명도/색상 팔레트
+const COLORS = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFD166', '#8338EC', '#FF9F1C', '#118AB2', '#06D6A0', '#EF476F', '#073B4C'];
 
 export default function Home() {
   // 초기 시간 설정
@@ -36,6 +41,8 @@ export default function Home() {
   const [currentTaskId, setCurrentTaskId] = useState<string | null>(null); // eslint-disable-line @typescript-eslint/no-unused-vars
   const [isTimeSelectVisible, setIsTimeSelectVisible] = useState(false);
   const [isTaskFormVisible, setIsTaskFormVisible] = useState(false);
+  const [isSaveFormVisible, setIsSaveFormVisible] = useState(false);
+  const [setsRefreshKey, setSetsRefreshKey] = useState(0);
 
   const timeSelectorRef = useRef<HTMLDivElement>(null);
 
@@ -53,6 +60,18 @@ export default function Home() {
     
     return Math.floor((end.getTime() - now.getTime()) / (1000 * 60));
   };
+
+  // 설정 시점의 총량(분) - 대기 상태에서 고정
+  const [initialTotalMinutes, setInitialTotalMinutes] = useState<number>(() => calculateTotalMinutes());
+  // 종료시각 변경 시점에 고정값 갱신
+  function calculateTotalMinutesFor(hours: number, minutes: number) {
+    const now = new Date();
+    const end = new Date();
+    end.setHours(hours);
+    end.setMinutes(minutes);
+    if (end < now) end.setDate(end.getDate() + 1);
+    return Math.floor((end.getTime() - now.getTime()) / (1000 * 60));
+  }
 
   const handleTimeClick = (e: React.MouseEvent) => {
     if (isRunning) return;
@@ -79,14 +98,32 @@ export default function Home() {
     setIsTimeSelectVisible(false);
   };
 
+  // 시간 기반 비율 계산 함수
+  function calculatePercentagesFromMinutes(tasks: Task[], totalMinutes: number): Task[] {
+    if (tasks.length === 0) return [];
+    return tasks.map(task => ({
+      ...task,
+      percentage: Math.round((task.minutes ?? task.duration ?? 0) / totalMinutes * 1000) / 10
+    }));
+  }
+
   const handleTimeSelect = (hours: number, minutes: number) => {
     setEndTime({ hours, minutes });
-    // 시간이 변경되면 작업 duration 업데이트
-    const totalMinutes = calculateTotalMinutes();
-    setTasks(tasks.map(task => ({
-      ...task,
-      duration: Math.floor((task.percentage / 100) * totalMinutes)
-    })));
+    // 시간이 변경되면 설정 총량도 갱신
+    const newTotal = calculateTotalMinutesFor(hours, minutes);
+    setInitialTotalMinutes(newTotal);
+    // 테스크가 있다면, 비율대로 minutes 재분배
+    if (tasks.length > 0) {
+      const even = Math.floor(newTotal / tasks.length);
+      const updatedTasks = tasks.map((task, idx) => ({
+        ...task,
+        minutes: idx === tasks.length - 1 ? newTotal - even * (tasks.length - 1) : even,
+        duration: idx === tasks.length - 1 ? newTotal - even * (tasks.length - 1) : even,
+      }));
+      setTasks(updatedTasks);
+    } else {
+      setTasks(calculatePercentagesFromMinutes(tasks, newTotal));
+    }
   };
 
   const handleTaskAdd = (newTask: Omit<Task, 'id' | 'duration'>) => {
@@ -98,42 +135,13 @@ export default function Home() {
     };
     const nextTasks = [...tasks, task];
 
-    // 1. 수동 비율 작업의 합
-    const manualTotal = nextTasks.filter(t => t.isManual).reduce((sum, t) => sum + t.percentage, 0);
-    // 2. 자동 분배 대상
-    const autoTasks = nextTasks.filter(t => !t.isManual);
-    const autoCount = autoTasks.length;
-    const remain = 100 - manualTotal;
-    const even = autoCount > 0 ? remain / autoCount : 0;
-
-    setTasks(
-      nextTasks.map(t => ({
-        ...t,
-        percentage: t.isManual ? t.percentage : even,
-        duration: Math.floor(((t.isManual ? t.percentage : even) / 100) * totalMinutes),
-      }))
-    );
+    setTasks(calculatePercentagesFromMinutes(nextTasks, totalMinutes));
   };
 
   const handleTaskDelete = (id: string) => {
-    // 삭제 후 남은 tasks의 isManual을 그대로 유지
     const filtered = tasks.filter(task => task.id !== id);
     const totalMinutes = calculateTotalMinutes();
-    // 1. 수동 비율 작업의 합
-    const manualTotal = filtered.filter(t => t.isManual).reduce((sum, t) => sum + t.percentage, 0);
-    // 2. 자동 분배 대상
-    const autoTasks = filtered.filter(t => !t.isManual);
-    const autoCount = autoTasks.length;
-    const remain = 100 - manualTotal;
-    const even = autoCount > 0 ? remain / autoCount : 0;
-
-    setTasks(
-      filtered.map(t => ({
-        ...t,
-        percentage: t.isManual ? t.percentage : even,
-        duration: Math.floor(((t.isManual ? t.percentage : even) / 100) * totalMinutes),
-      }))
-    );
+    setTasks(calculatePercentagesFromMinutes(filtered, totalMinutes));
   };
 
   const handleTaskComplete = (taskId: string) => {
@@ -157,10 +165,7 @@ export default function Home() {
 
   const handleStart = () => {
     const totalMinutes = calculateTotalMinutes();
-    setTasks(tasks.map(task => ({
-      ...task,
-      duration: Math.floor((task.percentage / 100) * totalMinutes),
-    })));
+    setTasks(calculatePercentagesFromMinutes(tasks, totalMinutes));
     setIsRunning(true);
     setStartTime(new Date());
     setCurrentTaskId(tasks[0]?.id || null);
@@ -192,23 +197,25 @@ export default function Home() {
       const newPercentage = 100 / newTaskNumber;
       const totalMinutes = calculateTotalMinutes();
       
-      // 기존 작업들의 비율 조정
+      // 기존 작업들의 시간 조정
+      const newTaskMinutes = Math.floor(totalMinutes / newTaskNumber);
       const updatedTasks = tasks.map(task => ({
         ...task,
-        percentage: newPercentage,
-        duration: Math.floor((newPercentage / 100) * totalMinutes)
+        minutes: newTaskMinutes,
+        duration: newTaskMinutes
       }));
 
       // 새 작업 추가
       const newTask = {
         name: `작업 ${newTaskNumber}`,
-        percentage: newPercentage,
+        minutes: newTaskMinutes,
+        percentage: 0, // calculatePercentagesFromMinutes에서 계산됨
         color: getRandomColor(),
         id: Math.random().toString(36).substr(2, 9),
-        duration: Math.floor((newPercentage / 100) * totalMinutes)
+        duration: newTaskMinutes
       };
 
-      setTasks([...updatedTasks, newTask]);
+      setTasks(calculatePercentagesFromMinutes([...updatedTasks, newTask], totalMinutes));
     } else {
       if (tasks.length <= 1) return;
 
@@ -216,38 +223,32 @@ export default function Home() {
       const newPercentage = 100 / newTaskNumber;
       const totalMinutes = calculateTotalMinutes();
 
-      // 마지막 작업을 제외하고 나머지 작업들의 비율 조정
+      // 마지막 작업을 제외하고 나머지 작업들의 시간 조정
+      const newTaskMinutes = Math.floor(totalMinutes / newTaskNumber);
       const updatedTasks = tasks.slice(0, -1).map(task => ({
         ...task,
-        percentage: newPercentage,
-        duration: Math.floor((newPercentage / 100) * totalMinutes)
+        minutes: newTaskMinutes,
+        duration: newTaskMinutes
       }));
 
-      setTasks(updatedTasks);
+      setTasks(calculatePercentagesFromMinutes(updatedTasks, totalMinutes));
     }
   };
 
+  let colorIndex = 0;
   const getRandomColor = () => {
-    const colors = [
-      '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4',
-      '#FFEEAD', '#D4A5A5', '#9B59B6', '#3498DB'
-    ];
-    return colors[Math.floor(Math.random() * colors.length)];
+    // 순차적으로 색상 할당, 부족하면 랜덤
+    const color = COLORS[colorIndex % COLORS.length];
+    colorIndex++;
+    return color;
   };
 
-  // TaskList에서 작업 이름/비율 수정 시 호출
-  const handleTaskUpdate = (id: string, updates: Partial<Pick<Task, 'name' | 'percentage'>>) => {
+  // TaskList에서 작업 이름/시간/색상 수정 시 호출
+  const handleTaskUpdate = (id: string, updates: Partial<Pick<Task, 'name' | 'percentage' | 'minutes' | 'duration' | 'color'>>) => {
     setTasks(prevTasks => {
       const totalMinutes = calculateTotalMinutes();
-      // 1. 비율을 직접 수정한 Task는 isManual true로 설정
-      let nextTasks = prevTasks.map(task => {
-        if (task.id === id && updates.percentage !== undefined) {
-          return {
-            ...task,
-            ...updates,
-            isManual: true // 수동조정 표시
-          };
-        } else if (task.id === id && updates.name !== undefined) {
+      const nextTasks = prevTasks.map(task => {
+        if (task.id === id) {
           return {
             ...task,
             ...updates
@@ -255,30 +256,56 @@ export default function Home() {
         }
         return task;
       });
-      // 2. 수동조정된 Task의 비율 합
-      const manualTotal = nextTasks.filter(t => t.isManual).reduce((sum, t) => sum + t.percentage, 0);
-      // 3. 자동조정 대상 Task
-      const autoTasks = nextTasks.filter(t => !t.isManual);
-      const autoCount = autoTasks.length;
-      const remain = 100 - manualTotal;
-      // 4. 자동조정 Task에 남은 비율 균등 분배
-      nextTasks = nextTasks.map(task => {
-        if (!task.isManual) {
-          const even = autoCount > 0 ? remain / autoCount : 0;
-          return {
-            ...task,
-            percentage: even
-          };
-        }
-        return task;
-      });
-      // 5. duration 재계산
-      return nextTasks.map(task => ({
-        ...task,
-        duration: Math.floor((task.percentage / 100) * totalMinutes)
-      }));
+      return calculatePercentagesFromMinutes(nextTasks, totalMinutes);
     });
   };
+
+  const handleSaveSet = (timerSet: TimerSet) => {
+    const saved = localStorage.getItem('timerSets');
+    const savedSets = saved ? JSON.parse(saved) : [];
+    savedSets.push(timerSet);
+    localStorage.setItem('timerSets', JSON.stringify(savedSets));
+    setIsSaveFormVisible(false);
+    setSetsRefreshKey(prev => prev + 1);
+  };
+
+  const handleLoadSet = (timerSet: TimerSet) => {
+    // 현재 시각 기준으로 종료시각 계산
+    const now = new Date();
+    const end = new Date(now.getTime() + timerSet.totalMinutes * 60 * 1000);
+    setEndTime({
+      hours: end.getHours(),
+      minutes: end.getMinutes()
+    });
+    setInitialTotalMinutes(timerSet.totalMinutes);
+    setTasks(calculatePercentagesFromMinutes(timerSet.tasks, timerSet.totalMinutes));
+    setIsTimeSelectVisible(false);
+    setIsTaskFormVisible(false);
+  };
+
+  const handleDeleteSet = (id: string) => {
+    const saved = localStorage.getItem('timerSets');
+    if (saved) {
+      const savedSets = JSON.parse(saved);
+      const updated = savedSets.filter((set: TimerSet) => set.id !== id);
+      localStorage.setItem('timerSets', JSON.stringify(updated));
+    }
+  };
+
+  // 작업 순서 변경 함수
+  const handleTaskReorder = (index: number, direction: 'up' | 'down') => {
+    const newTasks = [...tasks];
+    if (direction === 'up' && index > 0) {
+      [newTasks[index - 1], newTasks[index]] = [newTasks[index], newTasks[index - 1]];
+    } else if (direction === 'down' && index < newTasks.length - 1) {
+      [newTasks[index], newTasks[index + 1]] = [newTasks[index + 1], newTasks[index]];
+    }
+    const totalMinutes = calculateTotalMinutes();
+    setTasks(calculatePercentagesFromMinutes(newTasks, totalMinutes));
+  };
+
+  // 테스크 시간 총합 계산
+  const taskTotalMinutes = tasks.reduce((sum, t) => (t.minutes ?? t.duration ?? 0) + sum, 0);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -299,11 +326,13 @@ export default function Home() {
         <CircleTimer
           tasks={tasks}
           isRunning={isRunning}
-          totalMinutes={totalMinutes}
+          totalMinutes={taskTotalMinutes}
           onTaskComplete={handleTaskComplete}
           endTime={endTime}
           onTaskCountChange={handleTaskCountChange}
           onTimeClick={handleTimeClick}
+          startTime={startTime}
+          onReset={handleReset}
         />
       </div>
 
@@ -313,12 +342,24 @@ export default function Home() {
         isRunning={isRunning}
         isComplete={isComplete}
         totalMinutes={totalMinutes}
-        onTimeClick={handleTimeClick}
         onTaskClick={handleTaskClick}
         onReset={handleReset}
         onTaskCountChange={handleTaskCountChange}
         startTime={startTime}
       />
+
+      {/* 저장/불러오기 버튼들 */}
+      {!isRunning && !isComplete && (
+        <div className="flex justify-center gap-4 mb-8">
+          <button
+            onClick={() => setIsSaveFormVisible(true)}
+            className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 transition-colors"
+          >
+            현재 설정 저장
+          </button>
+          <SavedSets onLoadSet={handleLoadSet} onDeleteSet={handleDeleteSet} refreshKey={setsRefreshKey} />
+        </div>
+      )}
       
       {isTimeSelectVisible && !isRunning && (
         <div
@@ -334,23 +375,34 @@ export default function Home() {
       
       {isTaskFormVisible && !isRunning && (
         <div className="mb-8 bg-white rounded-lg shadow-lg">
-          <TaskForm onTaskAdd={handleTaskAdd} totalMinutes={totalMinutes} taskCount={tasks.length} />
+          <TaskForm onTaskAdd={handleTaskAdd} totalMinutes={initialTotalMinutes} taskCount={tasks.length} />
           <TaskList 
-            tasks={tasks} 
+            tasks={calculatePercentagesFromMinutes(tasks, initialTotalMinutes)} 
             onTaskDelete={handleTaskDelete} 
             onTaskUpdate={handleTaskUpdate}
-            totalMinutes={totalMinutes}
+            totalMinutes={initialTotalMinutes}
+            onTaskReorder={handleTaskReorder}
           />
         </div>
       )}
 
-      {!isComplete && (
+      {!isComplete && !isRunning && (
         <TimerButtons
           isRunning={isRunning}
           canStart={canStart}
           isComplete={isComplete}
           onStart={handleStart}
           onReset={handleReset}
+        />
+      )}
+
+      {isSaveFormVisible && (
+        <SaveSetForm
+          endTime={endTime}
+          tasks={tasks}
+          totalMinutes={totalMinutes}
+          onSave={handleSaveSet}
+          onCancel={() => setIsSaveFormVisible(false)}
         />
       )}
 

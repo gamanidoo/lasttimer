@@ -10,6 +10,44 @@ interface CircleTimerProps {
   endTime: { hours: number; minutes: number };
   onTaskCountChange: (type: 'add' | 'remove') => void;
   onTimeClick: (e: React.MouseEvent) => void;
+  startTime: Date | null;
+  onReset: () => void;
+}
+
+// 시간 기반 비율 계산 함수
+function calculatePercentagesFromMinutes(tasks: Task[], totalMinutes: number): Task[] {
+  if (tasks.length === 0) return [];
+  return tasks.map(task => ({
+    ...task,
+    percentage: Math.round((task.minutes ?? task.duration ?? 0) / totalMinutes * 1000) / 10
+  }));
+}
+
+// 시간 기반 비율 계산 함수 (마지막 작업 보정)
+function getTaskPercentages(tasks: Task[], totalMinutes: number): number[] {
+  if (tasks.length === 0) return [];
+  let sum = 0;
+  return tasks.map((task, idx) => {
+    if (idx === tasks.length - 1) {
+      return Math.max(0, 100 - sum);
+    }
+    const percent = Math.round(((task.minutes ?? task.duration ?? 0) / totalMinutes) * 1000) / 10;
+    sum += percent;
+    return percent;
+  });
+}
+
+// 경과 시간 기준 현재 작업 인덱스 계산
+function getCurrentTaskIndex(tasks: Task[], elapsedMinutes: number): number {
+  let acc = 0;
+  for (let i = 0; i < tasks.length; i++) {
+    const duration = tasks[i].duration ?? 0;
+    if (elapsedMinutes < acc + duration) {
+      return i;
+    }
+    acc += duration;
+  }
+  return tasks.length - 1;
 }
 
 export const CircleTimer = ({
@@ -19,15 +57,17 @@ export const CircleTimer = ({
   onTaskComplete,
   endTime,
   onTaskCountChange, // eslint-disable-line @typescript-eslint/no-unused-vars
-  onTimeClick
+  onTimeClick,
+  startTime,
+  onReset
 }: CircleTimerProps) => {
   const [elapsedMinutes, setElapsedMinutes] = useState(0);
   const [currentTime, setCurrentTime] = useState(new Date());
-  const [startTime, setStartTime] = useState<Date | null>(null);
   const [isTaskListVisible, setIsTaskListVisible] = useState(false);
   const hasEndedRef = useRef(false);
   const currentTaskIndexRef = useRef<number>(0);
   const taskListRef = useRef<HTMLDivElement>(null);
+  const lastUpdateRef = useRef<number>(Date.now());
   const size = 300;
   const strokeWidth = 30;
   const radius = (size - strokeWidth) / 2;
@@ -50,18 +90,28 @@ export const CircleTimer = ({
 
   // 현재 시각 업데이트 및 종료 시각 체크
   useEffect(() => {
-    const interval = setInterval(() => {
+    if (!isRunning || !startTime) return;
+
+    const calculateElapsedTime = () => {
+      const now = new Date();
+      // 종료시각과 무관하게, 시작~현재 경과 시간만 계산
+      const elapsedMs = now.getTime() - startTime.getTime();
+      const elapsedMins = elapsedMs / (1000 * 60);
+      // 경과 시간이 총 시간을 초과하지 않도록 제한
+      return Math.min(elapsedMins, totalMinutes);
+    };
+
+    const updateTimer = () => {
       const now = new Date();
       setCurrentTime(now);
       
+      // 경과 시간 업데이트
+      const elapsed = calculateElapsedTime();
+      setElapsedMinutes(elapsed);
+      
       // 종료 시각 체크
-      if (isRunning && !hasEndedRef.current) {
-        const endTimeDate = new Date();
-        endTimeDate.setHours(endTime.hours);
-        endTimeDate.setMinutes(endTime.minutes);
-        endTimeDate.setSeconds(0);
-        
-        if (now >= endTimeDate) {
+      if (!hasEndedRef.current) {
+        if (elapsed >= totalMinutes) {
           hasEndedRef.current = true;
           // 마지막 작업 완료 처리
           if (tasks.length > 0) {
@@ -69,26 +119,45 @@ export const CircleTimer = ({
           }
         }
       }
-    }, 1000); // 1초마다 업데이트
 
-    return () => clearInterval(interval);
-  }, [isRunning, endTime, tasks, onTaskComplete]);
+      lastUpdateRef.current = Date.now();
+    };
+
+    // 초기 업데이트
+    updateTimer();
+
+    const interval = setInterval(updateTimer, 1000);
+
+    // Page Visibility API를 사용하여 백그라운드/포그라운드 전환 감지
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        // 포그라운드로 돌아왔을 때 즉시 시간 업데이트
+        updateTimer();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    // 포커스 이벤트 처리 추가
+    const handleFocus = () => {
+      updateTimer();
+    };
+
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [isRunning, startTime, endTime, tasks, totalMinutes, onTaskComplete]);
 
   // 타이머 시작 또는 초기화 시 hasEndedRef와 currentTaskIndexRef 리셋
   useEffect(() => {
     if (!isRunning) {
       hasEndedRef.current = false;
       currentTaskIndexRef.current = 0;
-    }
-  }, [isRunning]);
-
-  // 타이머 시작 시 시작 시각을 기록
-  useEffect(() => {
-    if (isRunning && !startTime) {
-      setStartTime(new Date());
-    }
-    if (!isRunning) {
-      setStartTime(null);
+      setElapsedMinutes(0);
     }
   }, [isRunning]);
 
@@ -96,7 +165,7 @@ export const CircleTimer = ({
   useEffect(() => {
     if (!isRunning || tasks.length === 0 || !startTime) return;
 
-    const interval = setInterval(() => {
+    const checkTaskProgress = () => {
       const now = new Date();
       let accumulatedMinutes = 0;
       
@@ -115,37 +184,40 @@ export const CircleTimer = ({
           break;
         }
       }
-    }, 1000);
+    };
 
-    return () => clearInterval(interval);
+    const interval = setInterval(checkTaskProgress, 1000);
+
+    // Page Visibility API를 사용하여 백그라운드/포그라운드 전환 감지
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        checkTaskProgress();
+      }
+    };
+
+    // 포커스 이벤트 처리 추가
+    const handleFocus = () => {
+      checkTaskProgress();
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleFocus);
+    };
   }, [isRunning, tasks, totalMinutes, startTime, onTaskComplete]);
 
+  // 미작동(대기) 상태에서도 1분마다 현재시간 업데이트
   useEffect(() => {
-    if (!isRunning) {
-      setElapsedMinutes(0);
-      return;
-    }
-
-    const interval = setInterval(() => {
-      setElapsedMinutes((prev) => {
-        const now = new Date();
-        const endTimeDate = new Date();
-        endTimeDate.setHours(endTime.hours);
-        endTimeDate.setMinutes(endTime.minutes);
-        endTimeDate.setSeconds(0);
-        
-        // 종료 시각에 도달했으면 더 이상 증가하지 않음
-        if (now >= endTimeDate) {
-          return totalMinutes;
-        }
-        
-        const next = prev + 1/60; // 1초마다 1/60분씩 증가
-        return Math.min(next, totalMinutes);
-      });
-    }, 1000);
-
+    if (isRunning) return;
+    const updateNow = () => setCurrentTime(new Date());
+    updateNow();
+    const interval = setInterval(updateNow, 60 * 1000);
     return () => clearInterval(interval);
-  }, [isRunning, endTime, totalMinutes]);
+  }, [isRunning]);
 
   const formatTimeText = (hours: number, minutes: number) => {
     const parts = [];
@@ -266,6 +338,29 @@ export const CircleTimer = ({
     return `${mins}분`;
   };
 
+  // duration(분) 기준 비율 계산 및 duration 계산을 통일
+  const percentages = getTaskPercentages(tasks, totalMinutes);
+  const displayTasks: Task[] = tasks.map((task, idx) => ({
+    ...task,
+    percentage: percentages[idx],
+    duration: Math.round(totalMinutes * percentages[idx] / 100)
+  }));
+
+  // 현재 작업 인덱스 계산
+  const currentTaskIndex = getCurrentTaskIndex(displayTasks, elapsedMinutes);
+
+  // 중앙 텍스트(현재 작업/남은 시간)
+  const currentTask = displayTasks[currentTaskIndex];
+  let currentTaskRemaining = 0;
+  if (currentTask) {
+    let acc = 0;
+    for (let i = 0; i < currentTaskIndex; i++) {
+      acc += displayTasks[i].duration ?? 0;
+    }
+    currentTaskRemaining = (currentTask.duration ?? 0) - (elapsedMinutes - acc);
+    if (currentTaskRemaining < 0) currentTaskRemaining = 0;
+  }
+
   return (
     <div className="relative">
       <svg width={size} height={size}>
@@ -280,16 +375,18 @@ export const CircleTimer = ({
         />
 
         {/* 진행률 파이차트 (작업별 색상) */}
-        {isRunning && tasks.length > 0 && (() => {
+        {isRunning && displayTasks.length > 0 && (() => {
           let acc = 0;
-          let remain = progress;
-          return tasks.map((task, idx) => { // eslint-disable-line @typescript-eslint/no-unused-vars
-            const taskPercent = task.percentage / 100;
-            const fillPercent = Math.min(remain, taskPercent);
-            const start = acc;
-            const end = acc + fillPercent;
-            acc += taskPercent;
-            remain -= fillPercent;
+          return displayTasks.map((task, idx) => {
+            const taskDuration = task.duration ?? 0;
+            const taskStart = acc;
+            const taskEnd = acc + taskDuration;
+            // 각 작업별 내부 경과 시간
+            const taskElapsed = Math.max(0, Math.min(elapsedMinutes - taskStart, taskDuration));
+            const fillPercent = taskDuration > 0 ? taskElapsed / taskDuration : 0;
+            const start = taskStart / totalMinutes;
+            const end = (taskStart + taskElapsed) / totalMinutes;
+            acc += taskDuration;
             if (fillPercent <= 0) return null;
             return (
               <path
@@ -304,88 +401,48 @@ export const CircleTimer = ({
         })()}
 
         {/* 작업 구간 (테두리) */}
-        {tasks.map((task) => {
-          const startPercentage = currentPercentage;
-          const endPercentage = startPercentage + (task.percentage / 100);
-          const taskProgress = Math.min(
-            Math.max((progress - startPercentage) / (task.percentage / 100), 0),
-            1
-          );
-          
-          currentPercentage = endPercentage;
-
-          return (
-            <path
-              key={task.id}
-              d={getTaskArc(startPercentage, endPercentage)}
-              fill="none"
-              stroke={task.color}
-              strokeWidth={strokeWidth}
-              strokeOpacity={isRunning ? (taskProgress > 0 ? 1 : 0.3) : 0.3}
-            />
-          );
-        })}
+        {(() => {
+          let currentPercentage = 0;
+          return displayTasks.map((task, idx) => {
+            const startPercentage = currentPercentage;
+            const endPercentage = startPercentage + (task.percentage / 100);
+            currentPercentage = endPercentage;
+            const taskProgress = Math.min(
+              Math.max((progress - startPercentage) / (task.percentage / 100), 0),
+              1
+            );
+            return (
+              <path
+                key={task.id}
+                d={getTaskArc(startPercentage, endPercentage)}
+                fill="none"
+                stroke={task.color}
+                strokeWidth={strokeWidth}
+                strokeOpacity={isRunning ? (taskProgress > 0 ? 1 : 0.3) : 0.3}
+              />
+            );
+          });
+        })()}
       </svg>
 
       {/* 중앙 텍스트 */}
       <div className="absolute inset-0 flex items-center justify-center">
         <div className="text-center">
-          {isRunning && currentTaskInfo ? (
+          {isRunning && currentTask ? (
             <div className="text-lg font-medium">
               <button
                 onClick={handleTaskNameClick}
                 className="hover:text-yellow-500 transition-colors"
               >
-                [{currentTaskInfo.name}]
+                [{currentTask.name}]
               </button>
-              <div>{currentTaskInfo.remainingTime}</div>
-              
-              {/* 작업 목록 팝업 */}
-              {isTaskListVisible && (
-                <div 
-                  ref={taskListRef}
-                  className="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 bg-white rounded-lg shadow-lg p-4 min-w-[280px] z-10"
-                >
-                  <div className="text-left text-sm font-normal space-y-2">
-                    {tasks.map((task, index) => {
-                      const { progress, elapsed, total } = calculateTaskProgress(index);
-                      const isCurrent = index === currentTaskIndexRef.current;
-                      return (
-                        <div
-                          key={task.id}
-                          className={`p-3 rounded ${
-                            isCurrent ? 'bg-yellow-50' : ''
-                          }`}
-                        >
-                          <div className="flex items-center justify-between mb-1">
-                            <div className="flex items-center gap-2">
-                              <div
-                                className="w-3 h-3 rounded-full"
-                                style={{ backgroundColor: task.color }}
-                              />
-                              <span className="font-medium text-black">{task.name}</span>
-                            </div>
-                            <div className="text-xs text-gray-500">
-                              {progress}%
-                            </div>
-                          </div>
-                          <div className="text-xs text-gray-600 pl-5">
-                            {isCurrent ? (
-                              <>
-                                {formatTaskDuration(elapsed)} / {formatTaskDuration(total)}
-                              </>
-                            ) : index < currentTaskIndexRef.current ? (
-                              <span className="text-green-600">완료</span>
-                            ) : (
-                              <span>{formatTaskDuration(total)}</span>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
+              <div>{
+                (() => {
+                  const min = Math.floor(currentTaskRemaining);
+                  const sec = Math.floor((currentTaskRemaining - min) * 60);
+                  return `${min < 10 ? '0' : ''}${min}:${sec < 10 ? '0' : ''}${sec}`;
+                })()
+              }</div>
             </div>
           ) : (
             <div className="text-sm">
@@ -403,16 +460,63 @@ export const CircleTimer = ({
                   </button>
                 )}
               </div>
-              {isRunning && startTime ? (
-                <div>시작시간: {formatTimeText(startTime.getHours(), startTime.getMinutes())}</div>
-              ) : (
-                <div>지금시간: {formatTimeText(currentTime.getHours(), currentTime.getMinutes())}</div>
-              )}
-              <div>종료시간: {formatTimeText(endTime.hours, endTime.minutes)}</div>
             </div>
           )}
         </div>
       </div>
+
+      {/* 원형 그래프와 테스크리스트 사이에 총 집중시간/종료시각 표시 */}
+      {isRunning && (
+        <div className="w-full flex flex-col items-center justify-center mt-4 mb-2">
+          <div className="text-base font-semibold text-black dark:text-white">
+            {formatTotalTime(totalMinutes)} 집중
+          </div>
+          <div className="text-sm text-black dark:text-white mt-1">
+            종료시각 {endTime.hours.toString().padStart(2, '0')}:{endTime.minutes.toString().padStart(2, '0')}
+          </div>
+        </div>
+      )}
+
+      {/* 테스크 리스트 항상 노출 */}
+      {isRunning && (
+        <div className="absolute left-1/2 top-full mt-4 transform -translate-x-1/2 z-10 w-full max-w-xs mx-auto">
+          <div className="bg-white rounded-lg shadow-lg p-4 min-w-[280px]">
+            <div className="text-left text-sm font-normal space-y-2">
+              {displayTasks.map((task, index) => {
+                const percent = isNaN(task.percentage) ? 0 : task.percentage;
+                const percentText = percent.toFixed(1) + '%';
+                const duration = typeof task.duration === 'number' ? task.duration : 0;
+                const durationText = duration > 0 ? `${duration}분` : '0분';
+                const isCurrent = index === currentTaskIndex;
+                return (
+                  <div
+                    key={task.id}
+                    className={`flex items-center justify-between p-2 rounded ${isCurrent ? 'bg-yellow-50' : ''}`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="w-3 h-3 rounded-full inline-block" style={{ backgroundColor: task.color }} />
+                      <span className="font-medium text-black">{task.name}</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs">
+                      <span className="text-black">{durationText}</span>
+                      <span className="text-black">({percentText})</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {/* 리스트 하단에 초기화 버튼 */}
+            <div className="mt-4 flex justify-end">
+              <button
+                onClick={onReset}
+                className="w-full py-2 rounded-lg font-medium bg-red-500 text-white hover:bg-red-600 transition-colors text-center"
+              >
+                초기화
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }; 

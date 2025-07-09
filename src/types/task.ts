@@ -6,4 +6,13 @@ export interface Task {
   duration?: number;    // 실제 할당된 시간(분)
   color: string;
   isManual?: boolean;  // 수동조정 여부
+}
+
+export interface TimerSet {
+  id: string;
+  name: string;
+  endTime?: { hours: number; minutes: number };
+  tasks: Task[];
+  totalMinutes: number;
+  createdAt: Date;
 } 
