@@ -1,26 +1,13 @@
-import { useState, useRef } from 'react';
+import { useState } from 'react';
 import type { Task } from '../types/task';
+import { formatDurationSimple, minutesToSeconds, secondsToMinutes } from '../utils/timeUtils';
 
 interface TaskListProps {
   tasks: Task[];
   onTaskDelete: (id: string) => void;
-  onTaskUpdate: (id: string, updates: Partial<Pick<Task, 'name' | 'percentage' | 'minutes' | 'duration' | 'color'>>) => void;
+  onTaskUpdate: (id: string, updates: Partial<Pick<Task, 'name' | 'percentage' | 'minutes' | 'seconds' | 'duration' | 'color'>>) => void;
   totalMinutes: number;
   onTaskReorder: (index: number, direction: 'up' | 'down') => void;
-}
-
-// 시간 기반 비율 계산 함수 (마지막 작업 보정)
-function getTaskPercentages(tasks: Task[], totalMinutes: number): number[] {
-  if (tasks.length === 0) return [];
-  let sum = 0;
-  return tasks.map((task, idx) => {
-    if (idx === tasks.length - 1) {
-      return Math.max(0, 100 - sum);
-    }
-    const percent = Math.round(((task.minutes ?? task.duration ?? 0) / totalMinutes) * 1000) / 10;
-    sum += percent;
-    return percent;
-  });
 }
 
 export const TaskList = ({ tasks, onTaskDelete, onTaskUpdate, totalMinutes, onTaskReorder }: TaskListProps) => {
@@ -29,7 +16,8 @@ export const TaskList = ({ tasks, onTaskDelete, onTaskUpdate, totalMinutes, onTa
   const handleMinutesChange = (task: Task, minutes: number) => {
     const percentage = Math.round((minutes / totalMinutes) * 1000) / 10;
     const duration = minutes;
-    onTaskUpdate(task.id, { minutes, percentage, duration });
+    const seconds = minutesToSeconds(minutes); // 초 단위로도 저장
+    onTaskUpdate(task.id, { minutes, seconds, percentage, duration });
   };
 
   const handleColorChange = (color: string) => {
@@ -51,11 +39,16 @@ export const TaskList = ({ tasks, onTaskDelete, onTaskUpdate, totalMinutes, onTa
   return (
     <div className="space-y-2 p-4">
       <div className="mb-2 text-right text-black font-semibold">
-        총합: {totalTaskMinutes}분
+        총합: {formatDurationSimple(minutesToSeconds(totalTaskMinutes))}
       </div>
       {tasks.map((task, idx) => {
         const minutes = task.minutes ?? task.duration ?? 0;
         const percent = totalTaskMinutes > 0 ? (minutes / totalTaskMinutes) * 100 : 0;
+        
+        // 시간 표시: 초 단위가 있으면 초 우선 사용
+        const taskSeconds = task.seconds ?? minutesToSeconds(minutes);
+        const durationText = formatDurationSimple(taskSeconds);
+        
         return (
           <div
             key={task.id}
@@ -97,13 +90,14 @@ export const TaskList = ({ tasks, onTaskDelete, onTaskUpdate, totalMinutes, onTa
               <div className="flex items-center gap-1">
                 <input
                   type="number"
+                  step="0.1" // 0.1분 단위 입력 허용
                   value={task.minutes ?? task.duration ?? 0}
-                  min={0}
+                  min={0.1}
                   max={totalMinutes}
                   onChange={e => handleMinutesChange(task, Number(e.target.value))}
                   className="w-16 text-sm text-gray-700 border-b border-gray-300 focus:border-blue-500 outline-none bg-transparent text-right"
                 />
-                <span className="text-sm text-black">분 ({percent.toFixed(1)}%)</span>
+                <span className="text-sm text-black">분 ({durationText}, {percent.toFixed(1)}%)</span>
               </div>
               <div className="flex flex-col ml-2">
                 <button

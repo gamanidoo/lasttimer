@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import type { Task } from '../types/task';
+import { minutesToSeconds, formatDurationSimple } from '../utils/timeUtils';
 
 interface TaskFormProps {
   onTaskAdd: (task: Omit<Task, 'id' | 'duration'>) => void;
@@ -30,12 +31,17 @@ export const TaskForm = ({ onTaskAdd, totalMinutes, taskCount = 0 }: TaskFormPro
     
     const taskMinutes = minutes === '' ? 0 : Number(minutes);
     if (taskMinutes <= 0 || taskMinutes > totalMinutes) {
-      alert(`시간은 1~${totalMinutes} 사이의 값이어야 합니다.`);
+      alert(`시간은 0.1~${totalMinutes} 사이의 값이어야 합니다.`);
       return;
     }
+    
+    // 초 단위로 저장
+    const taskSeconds = minutesToSeconds(taskMinutes);
+    
     onTaskAdd({
       name: taskName,
       minutes: taskMinutes,
+      seconds: taskSeconds, // 초 단위 추가
       percentage: calculatePercentage(taskMinutes),
       color: getRandomColor()
     });
@@ -61,10 +67,11 @@ export const TaskForm = ({ onTaskAdd, totalMinutes, taskCount = 0 }: TaskFormPro
         <div className="relative flex items-center">
           <input
             type="number"
+            step="0.1" // 0.1분 단위 입력 허용
             value={minutes}
             onChange={(e) => setMinutes(e.target.value)}
             placeholder="시간"
-            min="1"
+            min="0.1" // 최소 0.1분(6초)
             max={totalMinutes}
             className="w-24 p-2 rounded border border-gray-300 text-black"
           />

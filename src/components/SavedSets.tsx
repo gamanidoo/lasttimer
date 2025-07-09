@@ -14,20 +14,22 @@ export const SavedSets = ({ onLoadSet, onDeleteSet, refreshKey }: SavedSetsProps
   const [editData, setEditData] = useState<Partial<TimerSet> | null>(null);
 
   useEffect(() => {
-    const saved = localStorage.getItem('timerSets');
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      setSavedSets(parsed.map((set: any) => ({
-        ...set,
-        createdAt: new Date(set.createdAt)
-      })));
-    }
+    const loadSavedSets = () => {
+      try {
+        const saved = localStorage.getItem('timerSets');
+        if (saved) {
+          const parsed = JSON.parse(saved) as TimerSet[];
+          setSavedSets(parsed);
+        }
+      } catch (error) {
+        console.error('저장된 세트를 불러오는 중 오류가 발생했습니다:', error);
+      }
+    };
+
+    loadSavedSets();
   }, [refreshKey]);
 
-  const handleDelete = (id: string) => {
-    const updated = savedSets.filter(set => set.id !== id);
-    setSavedSets(updated);
-    localStorage.setItem('timerSets', JSON.stringify(updated));
+  const handleDeleteSet = (id: string) => {
     onDeleteSet(id);
   };
 
@@ -36,11 +38,11 @@ export const SavedSets = ({ onLoadSet, onDeleteSet, refreshKey }: SavedSetsProps
     setEditData({ ...set, tasks: set.tasks.map(task => ({ ...task })) });
   };
 
-  const handleEditChange = (field: keyof TimerSet, value: any) => {
+  const handleEditChange = (field: keyof TimerSet, value: string | number | { hours: number; minutes: number }) => {
     setEditData(prev => prev ? { ...prev, [field]: value } : prev);
   };
 
-  const handleEditTaskChange = (idx: number, field: keyof Task, value: any) => {
+  const handleEditTaskChange = (idx: number, field: keyof Task, value: string | number) => {
     setEditData(prev => {
       if (!prev || !prev.tasks) return prev;
       const newTasks = prev.tasks.map((t, i) => i === idx ? { ...t, [field]: value } : t);
@@ -128,7 +130,7 @@ export const SavedSets = ({ onLoadSet, onDeleteSet, refreshKey }: SavedSetsProps
                         value={editData?.endTime?.hours ?? 0}
                         min={0}
                         max={23}
-                        onChange={e => handleEditChange('endTime', { ...editData?.endTime, hours: Number(e.target.value) })}
+                        onChange={e => handleEditChange('endTime', { hours: Number(e.target.value), minutes: editData?.endTime?.minutes ?? 0 })}
                         className="w-16 px-2 py-1 border rounded text-black"
                         placeholder="시"
                       />
@@ -137,7 +139,7 @@ export const SavedSets = ({ onLoadSet, onDeleteSet, refreshKey }: SavedSetsProps
                         value={editData?.endTime?.minutes ?? 0}
                         min={0}
                         max={59}
-                        onChange={e => handleEditChange('endTime', { ...editData?.endTime, minutes: Number(e.target.value) })}
+                        onChange={e => handleEditChange('endTime', { hours: editData?.endTime?.hours ?? 0, minutes: Number(e.target.value) })}
                         className="w-16 px-2 py-1 border rounded text-black"
                         placeholder="분"
                       />
@@ -198,7 +200,7 @@ export const SavedSets = ({ onLoadSet, onDeleteSet, refreshKey }: SavedSetsProps
                           수정
                         </button>
                         <button
-                          onClick={() => handleDelete(set.id)}
+                          onClick={() => handleDeleteSet(set.id)}
                           className="text-red-500 hover:text-red-700 text-sm"
                         >
                           삭제

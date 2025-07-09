@@ -16,22 +16,16 @@ export const SaveSetForm = ({ endTime, tasks, totalMinutes, onSave, onCancel }: 
     e.preventDefault();
     if (!name.trim()) return;
 
-    // 테스크 시간 총합 계산
-    const sumMinutes = tasks.reduce((sum, t) => (t.minutes ?? t.duration ?? 0) + sum, 0);
-
     const timerSet: TimerSet = {
       id: Math.random().toString(36).substr(2, 9),
       name: name.trim(),
-      tasks: tasks.map(task => ({ ...task })), // 깊은 복사
-      totalMinutes: sumMinutes,
-      createdAt: new Date() // 저장일시
+      tasks: tasks,
+      endTime: endTime,
+      totalMinutes: totalMinutes,
+      createdAt: new Date()
     };
 
     onSave(timerSet);
-  };
-
-  const formatTime = (time: { hours: number; minutes: number }) => {
-    return `${String(time.hours).padStart(2, '0')}:${String(time.minutes).padStart(2, '0')}`;
   };
 
   const formatDuration = (minutes: number) => {

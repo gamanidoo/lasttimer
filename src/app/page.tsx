@@ -27,6 +27,7 @@ export default function Home() {
   });
   
   const [startTime, setStartTime] = useState<Date | null>(null);
+  const [actualEndTime, setActualEndTime] = useState<Date | null>(null); // 실제 종료 시간 추가
   
   // 기본 작업 설정
   const [tasks, setTasks] = useState<Task[]>(() => [
@@ -156,6 +157,8 @@ export default function Home() {
 
     const nextTaskIndex = tasks.findIndex(t => t.id === taskId) + 1;
     if (nextTaskIndex >= tasks.length) {
+      // 타이머 완료 시 실제 종료 시간 기록
+      setActualEndTime(new Date());
       setIsComplete(true);
       setIsRunning(false); // 타이머 중지
     } else {
@@ -182,6 +185,7 @@ export default function Home() {
       minutes: defaultTime.getMinutes()
     });
     setStartTime(null);
+    setActualEndTime(null); // 실제 종료 시간도 초기화
     setTasks([]);
     setCurrentTaskId(null);
     setIsTimeSelectVisible(false);
@@ -194,7 +198,6 @@ export default function Home() {
   const handleTaskCountChange = (type: 'add' | 'remove') => {
     if (type === 'add') {
       const newTaskNumber = tasks.length + 1;
-      const newPercentage = 100 / newTaskNumber;
       const totalMinutes = calculateTotalMinutes();
       
       // 기존 작업들의 시간 조정
@@ -220,7 +223,6 @@ export default function Home() {
       if (tasks.length <= 1) return;
 
       const newTaskNumber = tasks.length - 1;
-      const newPercentage = 100 / newTaskNumber;
       const totalMinutes = calculateTotalMinutes();
 
       // 마지막 작업을 제외하고 나머지 작업들의 시간 조정
@@ -244,7 +246,7 @@ export default function Home() {
   };
 
   // TaskList에서 작업 이름/시간/색상 수정 시 호출
-  const handleTaskUpdate = (id: string, updates: Partial<Pick<Task, 'name' | 'percentage' | 'minutes' | 'duration' | 'color'>>) => {
+  const handleTaskUpdate = (id: string, updates: Partial<Pick<Task, 'name' | 'percentage' | 'minutes' | 'seconds' | 'duration' | 'color'>>) => {
     setTasks(prevTasks => {
       const totalMinutes = calculateTotalMinutes();
       const nextTasks = prevTasks.map(task => {
@@ -333,6 +335,11 @@ export default function Home() {
           onTimeClick={handleTimeClick}
           startTime={startTime}
           onReset={handleReset}
+          actualElapsedMinutes={
+            startTime && actualEndTime 
+              ? Math.round((actualEndTime.getTime() - startTime.getTime()) / 60000)
+              : undefined
+          }
         />
       </div>
 
@@ -346,6 +353,7 @@ export default function Home() {
         onReset={handleReset}
         onTaskCountChange={handleTaskCountChange}
         startTime={startTime}
+        actualEndTime={actualEndTime}
       />
 
       {/* 저장/불러오기 버튼들 */}

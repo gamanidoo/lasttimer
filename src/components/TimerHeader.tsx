@@ -8,6 +8,7 @@ interface TimerHeaderProps {
   onReset: () => void;
   onTaskCountChange: (type: 'add' | 'remove') => void;
   startTime?: Date | null;
+  actualEndTime?: Date | null; // 실제 종료 시간 추가
 }
 
 export const TimerHeader = ({
@@ -19,7 +20,8 @@ export const TimerHeader = ({
   onTaskClick,
   onReset,
   onTaskCountChange,
-  startTime
+  startTime,
+  actualEndTime
 }: TimerHeaderProps) => {
   const formatDuration = (minutes: number) => {
     const hours = Math.floor(minutes / 60);
@@ -36,17 +38,13 @@ export const TimerHeader = ({
     return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
   };
 
-  const getDurationText = () => {
-    if (startTime && endTime) {
-      const start = new Date(startTime);
-      const end = new Date();
-      end.setHours(endTime.hours);
-      end.setMinutes(endTime.minutes);
-      end.setSeconds(0);
-      let diff = Math.round((end.getTime() - start.getTime()) / 60000); // 분 단위
-      if (diff < 0) diff += 24 * 60; // 자정 넘김 보정
-      const hours = Math.floor(diff / 60);
-      const minutes = diff % 60;
+  // 실제 경과 시간 계산 (startTime과 actualEndTime 사용)
+  const getActualDurationText = () => {
+    if (startTime && actualEndTime) {
+      const diffMs = actualEndTime.getTime() - startTime.getTime();
+      const diffMinutes = Math.round(diffMs / 60000); // 분 단위로 반올림
+      const hours = Math.floor(diffMinutes / 60);
+      const minutes = diffMinutes % 60;
       if (hours > 0 && minutes > 0) return `${hours}시간 ${minutes}분`;
       if (hours > 0) return `${hours}시간`;
       return `${minutes}분`;
@@ -54,14 +52,16 @@ export const TimerHeader = ({
     return '';
   };
 
+
+
   if (isComplete) {
     return (
       <div className="text-center mb-8">
         <h2 className="text-2xl font-bold mb-2">수고하셨습니다! 🎉</h2>
-        {startTime && endTime && (
+        {startTime && actualEndTime && (
           <div className="text-lg mb-4">
-            <div>{formatTime(startTime)}~{formatTime(endTime)}</div>
-            <div className="font-bold">{getDurationText()} 집중 완료!</div>
+            <div>{formatTime(startTime)}~{formatTime(actualEndTime)}</div>
+            <div className="font-bold">{getActualDurationText()} 집중 완료!</div>
           </div>
         )}
         <button

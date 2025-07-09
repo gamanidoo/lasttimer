@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
-import { format } from 'date-fns'; // eslint-disable-line @typescript-eslint/no-unused-vars
 import type { Task } from '../types/task';
+import { formatDurationSimple, minutesToSeconds } from '../utils/timeUtils';
 
 interface CircleTimerProps {
   tasks: Task[];
@@ -12,28 +12,18 @@ interface CircleTimerProps {
   onTimeClick: (e: React.MouseEvent) => void;
   startTime: Date | null;
   onReset: () => void;
+  actualElapsedMinutes?: number; // 실제 경과 시간 (분)
 }
 
-// 시간 기반 비율 계산 함수
-function calculatePercentagesFromMinutes(tasks: Task[], totalMinutes: number): Task[] {
-  if (tasks.length === 0) return [];
-  return tasks.map(task => ({
-    ...task,
-    percentage: Math.round((task.minutes ?? task.duration ?? 0) / totalMinutes * 1000) / 10
-  }));
-}
-
-// 시간 기반 비율 계산 함수 (마지막 작업 보정)
+// 시간 기반 비율 계산 함수 (정확한 계산)
 function getTaskPercentages(tasks: Task[], totalMinutes: number): number[] {
   if (tasks.length === 0) return [];
-  let sum = 0;
-  return tasks.map((task, idx) => {
-    if (idx === tasks.length - 1) {
-      return Math.max(0, 100 - sum);
-    }
-    const percent = Math.round(((task.minutes ?? task.duration ?? 0) / totalMinutes) * 1000) / 10;
-    sum += percent;
-    return percent;
+  return tasks.map((task) => {
+    // 초 단위가 있으면 초 우선, 없으면 분 단위 사용
+    const taskSeconds = task.seconds ?? minutesToSeconds(task.minutes ?? task.duration ?? 0);
+    const totalSeconds = minutesToSeconds(totalMinutes);
+    // 반올림하지 않고 정확한 비율 계산
+    return (taskSeconds / totalSeconds) * 100;
   });
 }
 
@@ -41,11 +31,13 @@ function getTaskPercentages(tasks: Task[], totalMinutes: number): number[] {
 function getCurrentTaskIndex(tasks: Task[], elapsedMinutes: number): number {
   let acc = 0;
   for (let i = 0; i < tasks.length; i++) {
-    const duration = tasks[i].duration ?? 0;
-    if (elapsedMinutes < acc + duration) {
+    const task = tasks[i];
+    // 초 단위가 있으면 초 우선 사용
+    const taskMinutes = task.seconds ? task.seconds / 60 : (task.duration ?? 0);
+    if (elapsedMinutes < acc + taskMinutes) {
       return i;
     }
-    acc += duration;
+    acc += taskMinutes;
   }
   return tasks.length - 1;
 }
@@ -59,10 +51,10 @@ export const CircleTimer = ({
   onTaskCountChange, // eslint-disable-line @typescript-eslint/no-unused-vars
   onTimeClick,
   startTime,
-  onReset
+  onReset,
+  actualElapsedMinutes // eslint-disable-line @typescript-eslint/no-unused-vars
 }: CircleTimerProps) => {
   const [elapsedMinutes, setElapsedMinutes] = useState(0);
-  const [currentTime, setCurrentTime] = useState(new Date());
   const [isTaskListVisible, setIsTaskListVisible] = useState(false);
   const hasEndedRef = useRef(false);
   const currentTaskIndexRef = useRef<number>(0);
@@ -93,18 +85,14 @@ export const CircleTimer = ({
     if (!isRunning || !startTime) return;
 
     const calculateElapsedTime = () => {
-      const now = new Date();
       // 종료시각과 무관하게, 시작~현재 경과 시간만 계산
-      const elapsedMs = now.getTime() - startTime.getTime();
+      const elapsedMs = new Date().getTime() - startTime.getTime();
       const elapsedMins = elapsedMs / (1000 * 60);
       // 경과 시간이 총 시간을 초과하지 않도록 제한
       return Math.min(elapsedMins, totalMinutes);
     };
 
     const updateTimer = () => {
-      const now = new Date();
-      setCurrentTime(now);
-      
       // 경과 시간 업데이트
       const elapsed = calculateElapsedTime();
       setElapsedMinutes(elapsed);
@@ -213,18 +201,11 @@ export const CircleTimer = ({
   // 미작동(대기) 상태에서도 1분마다 현재시간 업데이트
   useEffect(() => {
     if (isRunning) return;
-    const updateNow = () => setCurrentTime(new Date());
+    const updateNow = () => setElapsedMinutes(Math.min(elapsedMinutes + 1, totalMinutes));
     updateNow();
     const interval = setInterval(updateNow, 60 * 1000);
     return () => clearInterval(interval);
-  }, [isRunning]);
-
-  const formatTimeText = (hours: number, minutes: number) => {
-    const parts = [];
-    if (hours > 0) parts.push(`${hours}시`);
-    if (minutes > 0) parts.push(`${minutes}분`);
-    return parts.join(' ');
-  };
+  }, [isRunning, elapsedMinutes, totalMinutes]);
 
   const formatTotalTime = (totalMinutes: number) => {
     const hours = Math.floor(totalMinutes / 60);
@@ -233,39 +214,6 @@ export const CircleTimer = ({
     if (hours > 0) parts.push(`${hours}시간`);
     if (minutes > 0) parts.push(`${minutes}분`);
     return parts.join(' ');
-  };
-
-  const getCurrentTaskInfo = () => {
-    if (!isRunning || tasks.length === 0) return null;
-
-    // 종료 시각 체크
-    const now = new Date();
-    const endTimeDate = new Date();
-    endTimeDate.setHours(endTime.hours);
-    endTimeDate.setMinutes(endTime.minutes);
-    endTimeDate.setSeconds(0);
-    
-    if (now >= endTimeDate) {
-      return null;
-    }
-
-    let accumulatedMinutes = 0;
-    for (const task of tasks) {
-      const taskDuration = (task.percentage / 100) * totalMinutes;
-      if (accumulatedMinutes + taskDuration > elapsedMinutes) {
-        const remainingMinutes = taskDuration - (elapsedMinutes - accumulatedMinutes);
-        const hours = Math.floor(remainingMinutes / 60);
-        const minutes = Math.floor(remainingMinutes % 60);
-        const seconds = Math.floor((remainingMinutes % 1) * 60);
-        
-        return {
-          name: task.name,
-          remainingTime: `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
-        };
-      }
-      accumulatedMinutes += taskDuration;
-    }
-    return null;
   };
 
   const getTaskArc = (startPercentage: number, endPercentage: number) => {
@@ -305,37 +253,9 @@ export const CircleTimer = ({
     return `M ${center} ${center} L ${x1} ${y1} A ${r} ${r} 0 ${largeArcFlag} 1 ${x2} ${y2} Z`;
   };
 
-  let currentPercentage = 0;
-  const progress = elapsedMinutes / totalMinutes;
-  const currentTaskInfo = getCurrentTaskInfo();
-
   const handleTaskNameClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     setIsTaskListVisible(!isTaskListVisible);
-  };
-
-  const calculateTaskProgress = (taskIndex: number) => {
-    let accumulatedMinutes = 0;
-    for (let i = 0; i < taskIndex; i++) {
-      accumulatedMinutes += (tasks[i].percentage / 100) * totalMinutes;
-    }
-    
-    const taskDuration = (tasks[taskIndex].percentage / 100) * totalMinutes;
-    const taskElapsedMinutes = Math.max(0, Math.min(elapsedMinutes - accumulatedMinutes, taskDuration));
-    return {
-      progress: Math.round((taskElapsedMinutes / taskDuration) * 100),
-      elapsed: Math.round(taskElapsedMinutes),
-      total: Math.round(taskDuration)
-    };
-  };
-
-  const formatTaskDuration = (minutes: number) => {
-    const hours = Math.floor(minutes / 60);
-    const mins = Math.round(minutes % 60);
-    if (hours > 0) {
-      return `${hours}시간 ${mins > 0 ? `${mins}분` : ''}`;
-    }
-    return `${mins}분`;
   };
 
   // duration(분) 기준 비율 계산 및 duration 계산을 통일
@@ -343,7 +263,8 @@ export const CircleTimer = ({
   const displayTasks: Task[] = tasks.map((task, idx) => ({
     ...task,
     percentage: percentages[idx],
-    duration: Math.round(totalMinutes * percentages[idx] / 100)
+    // 정확한 분 단위 사용 (반올림하지 않음)
+    duration: task.minutes ?? task.duration ?? (totalMinutes * percentages[idx] / 100)
   }));
 
   // 현재 작업 인덱스 계산
@@ -361,6 +282,8 @@ export const CircleTimer = ({
     if (currentTaskRemaining < 0) currentTaskRemaining = 0;
   }
 
+  const progress = elapsedMinutes / totalMinutes;
+
   return (
     <div className="relative">
       <svg width={size} height={size}>
@@ -377,11 +300,10 @@ export const CircleTimer = ({
         {/* 진행률 파이차트 (작업별 색상) */}
         {isRunning && displayTasks.length > 0 && (() => {
           let acc = 0;
-          return displayTasks.map((task, idx) => {
+          return displayTasks.map((task) => {
             const taskDuration = task.duration ?? 0;
             const taskStart = acc;
-            const taskEnd = acc + taskDuration;
-            // 각 작업별 내부 경과 시간
+           
             const taskElapsed = Math.max(0, Math.min(elapsedMinutes - taskStart, taskDuration));
             const fillPercent = taskDuration > 0 ? taskElapsed / taskDuration : 0;
             const start = taskStart / totalMinutes;
@@ -403,7 +325,7 @@ export const CircleTimer = ({
         {/* 작업 구간 (테두리) */}
         {(() => {
           let currentPercentage = 0;
-          return displayTasks.map((task, idx) => {
+          return displayTasks.map((task) => {
             const startPercentage = currentPercentage;
             const endPercentage = startPercentage + (task.percentage / 100);
             currentPercentage = endPercentage;
@@ -485,8 +407,10 @@ export const CircleTimer = ({
               {displayTasks.map((task, index) => {
                 const percent = isNaN(task.percentage) ? 0 : task.percentage;
                 const percentText = percent.toFixed(1) + '%';
-                const duration = typeof task.duration === 'number' ? task.duration : 0;
-                const durationText = duration > 0 ? `${duration}분` : '0분';
+                
+                // 초 단위가 있으면 초 우선 사용, 없으면 duration(분) 사용
+                const taskSeconds = task.seconds ?? minutesToSeconds(task.duration ?? 0);
+                const durationText = formatDurationSimple(taskSeconds);
                 const isCurrent = index === currentTaskIndex;
                 return (
                   <div
