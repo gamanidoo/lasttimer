@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { Task } from '../types/task';
-import { formatDurationSimple, minutesToSeconds, secondsToMinutes } from '../utils/timeUtils';
+import { formatDurationSimple, minutesToSeconds } from '../utils/timeUtils';
 
 interface TaskListProps {
   tasks: Task[];

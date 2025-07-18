@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { TimeSelector } from '@/components/TimeSelector';
 import { CircleTimer } from '@/components/CircleTimer';
+import { StatisticsView } from '@/components/StatisticsView';
 import type { Task, TimerSet } from '@/types/task';
 import { NotificationManager } from '@/components/NotificationManager';
 import { TaskForm } from '@/components/TaskForm';
@@ -12,11 +13,29 @@ import { TimerHeader } from '@/components/TimerHeader';
 import { SavedSets } from '@/components/SavedSets';
 import { SaveSetForm } from '@/components/SaveSetForm';
 import { addHours } from 'date-fns';
+import { 
+  logTimerStart, 
+  logTimerComplete, 
+  logTimerReset, 
+  logSetSave, 
+  logSetLoad, 
+  logSetDelete,
+  logTaskAdd,
+  logTaskDelete,
+  logTaskUpdate,
+  LogService
+} from '@/utils/logService';
+import { event as gtag_event } from '@/utils/gtag';
 
 // 더 다양한 고채도/명도/색상 팔레트
 const COLORS = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFD166', '#8338EC', '#FF9F1C', '#118AB2', '#06D6A0', '#EF476F', '#073B4C'];
 
 export default function Home() {
+  // 관리자 모드 상태
+  const [isAdminMode, setIsAdminMode] = useState(false);
+  const [keySequence, setKeySequence] = useState<string[]>([]);
+  const [titleClickCount, setTitleClickCount] = useState(0);
+
   // 초기 시간 설정
   const [endTime, setEndTime] = useState<{ hours: number; minutes: number }>(() => {
     const defaultTime = addHours(new Date(), 1);
@@ -43,9 +62,174 @@ export default function Home() {
   const [isTimeSelectVisible, setIsTimeSelectVisible] = useState(false);
   const [isTaskFormVisible, setIsTaskFormVisible] = useState(false);
   const [isSaveFormVisible, setIsSaveFormVisible] = useState(false);
+  const [isStatsVisible, setIsStatsVisible] = useState(false);
   const [setsRefreshKey, setSetsRefreshKey] = useState(0);
 
   const timeSelectorRef = useRef<HTMLDivElement>(null);
+
+  // 관리자 모드 키보드 이벤트 처리
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // 모든 키 이벤트 로깅 (디버깅용)
+      if (event.ctrlKey || event.shiftKey || event.metaKey) {
+        console.log(`키 이벤트: ${event.key} (Ctrl: ${event.ctrlKey}, Shift: ${event.shiftKey}, Meta: ${event.metaKey})`);
+      }
+
+      // Ctrl + Shift + A 조합으로 관리자 모드 토글 (대소문자 관계없이)
+      if (event.ctrlKey && event.shiftKey && (event.key === 'A' || event.key === 'a')) {
+        event.preventDefault();
+        console.log('🔑 관리자 모드 단축키 감지됨 (Ctrl+Shift+A)');
+        toggleAdminMode();
+        return;
+      }
+
+      // 대안 1: Ctrl + Alt + A 조합
+      if (event.ctrlKey && event.altKey && (event.key === 'A' || event.key === 'a')) {
+        event.preventDefault();
+        console.log('🔑 관리자 모드 단축키 감지됨 (Ctrl+Alt+A)');
+        toggleAdminMode();
+        return;
+      }
+
+      // 대안 2: 특별한 키 시퀀스 (admin)
+      setKeySequence(prev => {
+        const newSequence = [...prev, event.key.toLowerCase()].slice(-5);
+        console.log(`키 시퀀스: ${newSequence.join('')}`);
+        
+        if (newSequence.join('') === 'admin') {
+          console.log('🔑 관리자 모드 키 시퀀스 감지됨 (admin)');
+          toggleAdminMode();
+          return [];
+        }
+        
+        return newSequence;
+      });
+    };
+
+    console.log('🔧 키보드 이벤트 리스너 등록됨');
+    window.addEventListener('keydown', handleKeyDown);
+    
+    return () => {
+      console.log('🔧 키보드 이벤트 리스너 해제됨');
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
+
+  // 관리자 모드 토글
+  const toggleAdminMode = useCallback(() => {
+    setIsAdminMode(prev => {
+      const newMode = !prev;
+      if (newMode) {
+        console.log('🔓 관리자 모드가 활성화되었습니다.');
+        sessionStorage.setItem('adminMode', 'true');
+        
+        // GA4 이벤트 전송
+        gtag_event('admin_mode_activate', {
+          event_label: '관리자_모드_활성화',
+          method: 'manual_toggle',
+          timestamp: new Date().toISOString()
+        });
+        
+        setTimeout(() => {
+          console.log('✅ 관리자 모드 활성화 완료!');
+          console.log('📊 "사용 통계" 버튼을 클릭하여 모든 사용자의 로그를 확인하세요.');
+          console.log('🌍 이제 GA4에서도 실시간으로 모든 사용자 데이터를 확인할 수 있습니다!');
+        }, 100);
+      } else {
+        console.log('🔒 관리자 모드가 비활성화되었습니다.');
+        sessionStorage.removeItem('adminMode');
+        setTimeout(() => {
+          console.log('✅ 관리자 모드 비활성화 완료!');
+        }, 100);
+      }
+      return newMode;
+    });
+    setTitleClickCount(0); // 클릭 카운트 리셋
+  }, []);
+
+  // 타이틀 클릭 핸들러 (히든 관리자 모드 접근)
+  const handleTitleClick = () => {
+    if (isAdminMode) return; // 이미 관리자 모드면 무시
+    
+    setTitleClickCount(prev => {
+      const newCount = prev + 1;
+      console.log(`타이틀 클릭 횟수: ${newCount}/5`);
+      
+      // 진행도 피드백
+      if (newCount === 3) {
+        console.log('🔓 관리자 모드까지 2번 더 클릭하세요!');
+      } else if (newCount === 4) {
+        console.log('🔓 관리자 모드까지 1번 더 클릭하세요!');
+      }
+      
+      if (newCount >= 5) {
+        console.log('🔑 타이틀 5회 클릭으로 관리자 모드 활성화');
+        toggleAdminMode();
+        return 0;
+      }
+      
+      // 3초 후 카운트 리셋
+      setTimeout(() => {
+        setTitleClickCount(0);
+      }, 3000);
+      
+      return newCount;
+    });
+  };
+
+  // 페이지 로드 시 세션에서 관리자 모드 상태 복원
+  useEffect(() => {
+    const savedAdminMode = sessionStorage.getItem('adminMode');
+    if (savedAdminMode === 'true') {
+      setIsAdminMode(true);
+      console.log('🔓 관리자 모드가 복원되었습니다.');
+    }
+
+    // 개발자를 위한 관리자 모드 안내 (한 번만 표시)
+    if (!localStorage.getItem('adminModeGuideShown')) {
+      console.log('🔑 관리자 모드 접근 방법:');
+      console.log('1. Ctrl + Shift + A (또는 Ctrl + Alt + A)');
+      console.log('2. "admin" 키 순서대로 입력');
+      console.log('3. 타이틀을 5번 연속 클릭');
+      console.log('4. 콘솔에서 activateAdminMode() 직접 실행 ⭐ 추천!');
+      console.log('');
+      console.log('📊 관리자 모드에서는 로컬 + GA4 데이터를 모두 확인할 수 있습니다.');
+      console.log('🌍 GA4 설정: docs/ga4-setup.md 참고');
+      console.log('🚀 지금 바로 시도해보세요: activateAdminMode()');
+      localStorage.setItem('adminModeGuideShown', 'true');
+    }
+  }, []);
+
+  // 관리자 모드 함수를 전역으로 노출
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      (window as any).toggleAdminMode = toggleAdminMode;
+      (window as any).activateAdminMode = () => {
+        setIsAdminMode(true);
+        sessionStorage.setItem('adminMode', 'true');
+        console.log('🔓 관리자 모드가 활성화되었습니다! (콘솔에서 실행됨)');
+        console.log('📊 이제 화면 상단에 빨간색 관리자 모드 바가 나타납니다.');
+        console.log('💡 "사용 통계" 버튼을 클릭하여 모든 사용자 로그를 확인하세요!');
+        // 시각적 확인을 위한 임시 알림
+        setTimeout(() => {
+          if (document.querySelector('.admin-mode')) {
+            console.log('✅ 관리자 모드 UI가 정상적으로 표시되었습니다!');
+          } else {
+            console.log('❌ 관리자 모드 UI 표시에 문제가 있을 수 있습니다.');
+          }
+        }, 500);
+      };
+      (window as any).deactivateAdminMode = () => {
+        setIsAdminMode(false);
+        sessionStorage.removeItem('adminMode');
+        console.log('🔒 관리자 모드가 비활성화되었습니다!');
+      };
+      (window as any).checkAdminMode = () => {
+        console.log(`현재 관리자 모드 상태: ${isAdminMode ? '🔓 활성화됨' : '🔒 비활성화됨'}`);
+        return isAdminMode;
+      };
+    }
+  }, [toggleAdminMode, isAdminMode]);
 
   // 총 시간 계산 (분)
   const calculateTotalMinutes = () => {
@@ -137,12 +321,21 @@ export default function Home() {
     const nextTasks = [...tasks, task];
 
     setTasks(calculatePercentagesFromMinutes(nextTasks, totalMinutes));
+    
+    // 작업 추가 로그
+    logTaskAdd(task);
   };
 
   const handleTaskDelete = (id: string) => {
+    const taskToDelete = tasks.find(task => task.id === id);
     const filtered = tasks.filter(task => task.id !== id);
     const totalMinutes = calculateTotalMinutes();
     setTasks(calculatePercentagesFromMinutes(filtered, totalMinutes));
+    
+    // 작업 삭제 로그
+    if (taskToDelete) {
+      logTaskDelete(id, taskToDelete.name);
+    }
   };
 
   const handleTaskComplete = (taskId: string) => {
@@ -158,9 +351,16 @@ export default function Home() {
     const nextTaskIndex = tasks.findIndex(t => t.id === taskId) + 1;
     if (nextTaskIndex >= tasks.length) {
       // 타이머 완료 시 실제 종료 시간 기록
-      setActualEndTime(new Date());
+      const endTime = new Date();
+      setActualEndTime(endTime);
       setIsComplete(true);
       setIsRunning(false); // 타이머 중지
+      
+      // 타이머 완료 로그
+      if (startTime) {
+        const actualDuration = Math.round((endTime.getTime() - startTime.getTime()) / 60000);
+        logTimerComplete(initialTotalMinutes, tasks.length, actualDuration);
+      }
     } else {
       setCurrentTaskId(tasks[nextTaskIndex].id);
     }
@@ -174,9 +374,17 @@ export default function Home() {
     setCurrentTaskId(tasks[0]?.id || null);
     setIsTimeSelectVisible(false);
     setIsTaskFormVisible(false);
+    
+    // 타이머 시작 로그
+    logTimerStart(totalMinutes, tasks.length);
   };
 
   const handleReset = () => {
+    // 리셋 로그 (리셋 전에 기록)
+    if (isRunning || isComplete) {
+      logTimerReset(initialTotalMinutes, tasks.length);
+    }
+    
     const defaultTime = addHours(new Date(), 1);
     setIsRunning(false);
     setIsComplete(false);
@@ -260,6 +468,9 @@ export default function Home() {
       });
       return calculatePercentagesFromMinutes(nextTasks, totalMinutes);
     });
+    
+    // 작업 수정 로그
+    logTaskUpdate(id, updates);
   };
 
   const handleSaveSet = (timerSet: TimerSet) => {
@@ -269,6 +480,9 @@ export default function Home() {
     localStorage.setItem('timerSets', JSON.stringify(savedSets));
     setIsSaveFormVisible(false);
     setSetsRefreshKey(prev => prev + 1);
+    
+    // 세트 저장 로그
+    logSetSave(timerSet);
   };
 
   const handleLoadSet = (timerSet: TimerSet) => {
@@ -283,14 +497,23 @@ export default function Home() {
     setTasks(calculatePercentagesFromMinutes(timerSet.tasks, timerSet.totalMinutes));
     setIsTimeSelectVisible(false);
     setIsTaskFormVisible(false);
+    
+    // 세트 로드 로그
+    logSetLoad(timerSet);
   };
 
   const handleDeleteSet = (id: string) => {
     const saved = localStorage.getItem('timerSets');
     if (saved) {
       const savedSets = JSON.parse(saved);
+      const setToDelete = savedSets.find((set: TimerSet) => set.id === id);
       const updated = savedSets.filter((set: TimerSet) => set.id !== id);
       localStorage.setItem('timerSets', JSON.stringify(updated));
+      
+      // 세트 삭제 로그
+      if (setToDelete) {
+        logSetDelete(id, setToDelete.name);
+      }
     }
   };
 
@@ -318,11 +541,44 @@ export default function Home() {
     }
   }, [isRunning]);
   
-
-
   return (
-    <main className="container mx-auto max-w-2xl p-4" onClick={handleOutsideClick}>
-      <h1 className="text-3xl font-bold text-center mb-8">⏱️ 시간분배 타이머</h1>
+    <main className={`container mx-auto max-w-2xl p-4 ${isAdminMode ? 'admin-mode' : ''}`} onClick={handleOutsideClick}>
+      {/* 관리자 모드 전체 화면 표시 */}
+      {isAdminMode && (
+        <div className="fixed top-0 left-0 right-0 bg-red-600 text-white text-center py-2 z-50 shadow-lg">
+          <div className="flex items-center justify-center gap-4">
+            <span className="font-bold">🔓 관리자 모드 활성화됨</span>
+            <button
+              onClick={toggleAdminMode}
+              className="bg-red-700 hover:bg-red-800 px-3 py-1 rounded text-sm transition-colors"
+            >
+              종료
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 상단 여백 (관리자 모드 바가 있을 때) */}
+      <div className={isAdminMode ? 'mt-12' : ''}>
+        <div className="flex items-center justify-center mb-8">
+          <h1 
+            className={`text-3xl font-bold text-center cursor-pointer select-none transition-colors ${
+              isAdminMode ? 'text-red-600' : ''
+            }`}
+            onClick={handleTitleClick}
+            title={isAdminMode ? "관리자 모드 활성화됨 - 클릭하여 종료" : "5번 클릭하면 관리자 모드"}
+          >
+            ⏱️ 시간분배 타이머 {isAdminMode ? '🔓' : ''}
+          </h1>
+          {isAdminMode && (
+            <div className="ml-4 flex items-center">
+              <span className="text-sm bg-red-100 text-red-600 px-3 py-1 rounded-full font-medium animate-pulse">
+                🔓 ADMIN
+              </span>
+            </div>
+          )}
+        </div>
+      </div>
       
       <div className="flex justify-center mb-8">
         <CircleTimer
@@ -366,6 +622,14 @@ export default function Home() {
             현재 설정 저장
           </button>
           <SavedSets onLoadSet={handleLoadSet} onDeleteSet={handleDeleteSet} refreshKey={setsRefreshKey} />
+          {isAdminMode && (
+            <button
+              onClick={() => setIsStatsVisible(true)}
+              className="bg-purple-500 text-white px-4 py-2 rounded hover:bg-purple-600 transition-colors"
+            >
+              📊 사용 통계
+            </button>
+          )}
         </div>
       )}
       
@@ -417,6 +681,14 @@ export default function Home() {
       <NotificationManager
         onPermissionChange={setHasNotificationPermission}
       />
+
+      {/* 통계 모달 */}
+      {isAdminMode && (
+        <StatisticsView
+          isVisible={isStatsVisible}
+          onClose={() => setIsStatsVisible(false)}
+        />
+      )}
     </main>
   );
 }

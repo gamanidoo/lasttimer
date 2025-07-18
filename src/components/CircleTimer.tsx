@@ -201,11 +201,11 @@ export const CircleTimer = ({
   // 미작동(대기) 상태에서도 1분마다 현재시간 업데이트
   useEffect(() => {
     if (isRunning) return;
-    const updateNow = () => setElapsedMinutes(Math.min(elapsedMinutes + 1, totalMinutes));
+    const updateNow = () => setElapsedMinutes(prev => Math.min(prev + 1, totalMinutes));
     updateNow();
     const interval = setInterval(updateNow, 60 * 1000);
     return () => clearInterval(interval);
-  }, [isRunning, elapsedMinutes, totalMinutes]);
+  }, [isRunning, totalMinutes]);
 
   const formatTotalTime = (totalMinutes: number) => {
     const hours = Math.floor(totalMinutes / 60);

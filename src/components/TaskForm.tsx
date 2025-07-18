@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import type { Task } from '../types/task';
-import { minutesToSeconds, formatDurationSimple } from '../utils/timeUtils';
+import { minutesToSeconds } from '../utils/timeUtils';
 
 interface TaskFormProps {
   onTaskAdd: (task: Omit<Task, 'id' | 'duration'>) => void;

@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ClientBeforeUnloadHandler } from "./ClientBeforeUnloadHandler";
+import { GA_TRACKING_ID } from "@/utils/gtag";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -27,6 +28,35 @@ export default function RootLayout({
   return (
     <html lang="ko">
       <head>
+        {/* Google Analytics 4 */}
+        <script
+          async
+          src={`https://www.googletagmanager.com/gtag/js?id=${GA_TRACKING_ID}`}
+        />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              window.dataLayer = window.dataLayer || [];
+              function gtag(){dataLayer.push(arguments);}
+              gtag('js', new Date());
+              gtag('config', '${GA_TRACKING_ID}', {
+                page_path: window.location.pathname,
+                // 개인정보 보호 설정
+                anonymize_ip: true,
+                allow_google_signals: false,
+                allow_ad_personalization_signals: false,
+              });
+              
+              // 타이머 앱 초기화 이벤트
+              gtag('event', 'app_initialized', {
+                event_category: 'timer_app',
+                app_version: '1.0.0',
+                timestamp: new Date().toISOString()
+              });
+            `,
+          }}
+        />
+        
         <script dangerouslySetInnerHTML={{
           __html: `
             // Pull-to-refresh 방지 및 얼럿 표시
