@@ -11,7 +11,13 @@ export const StatisticsView = ({ isVisible, onClose }: StatisticsViewProps) => {
   const [overallStats, setOverallStats] = useState<UserStatistics | null>(null);
   const [todayStats, setTodayStats] = useState<UserStatistics | null>(null);
   const [globalStats, setGlobalStats] = useState<UserStatistics | null>(null);
-  const [setAnalysis, setSetAnalysis] = useState<any>(null);
+  const [setAnalysis, setSetAnalysis] = useState<{
+    totalSets: number;
+    mostUsedSet: string | null;
+    averageTasks: number;
+    averageDuration: number;
+    setUsageCount: { [setId: string]: number };
+  } | null>(null);
   const [activeTab, setActiveTab] = useState<'overall' | 'today' | 'global' | 'sets'>('overall');
 
   useEffect(() => {
@@ -288,7 +294,7 @@ export const StatisticsView = ({ isVisible, onClose }: StatisticsViewProps) => {
                         timerCompletions: 0,
                         firstSeen: log.timestamp,
                         lastSeen: log.timestamp,
-                        browser: log.data.userAgent?.split(' ')[0] || 'Unknown',
+                        browser: typeof log.data.userAgent === 'string' ? log.data.userAgent.split(' ')[0] : 'Unknown',
                         timezone: log.data.timezone || 'Unknown'
                       });
                     }

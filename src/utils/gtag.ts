@@ -25,6 +25,35 @@ export type GAEventType =
   | 'task_update'
   | 'admin_mode_activate';
 
+// GA4 이벤트 파라미터 타입 정의
+export interface GAEventParameters {
+  // 기본 이벤트 파라미터
+  event_category?: string;
+  event_label?: string;
+  value?: number;
+  
+  // 타이머 관련 파라미터
+  task_name?: string;
+  task_duration?: number;
+  task_position?: number;
+  total_tasks?: number;
+  completion_rate?: number;
+  actual_duration?: number;
+  
+  // 세트 관련 파라미터
+  set_name?: string;
+  set_id?: string;
+  tasks_count?: number;
+  
+  // 사용자 환경 정보
+  user_session_id?: string;
+  browser_info?: string;
+  screen_resolution?: string;
+  
+  // 커스텀 파라미터
+  [key: string]: string | number | boolean | undefined;
+}
+
 // GA4 페이지뷰 추적
 export const pageview = (url: string) => {
   if (typeof window !== 'undefined' && window.gtag) {
@@ -34,26 +63,10 @@ export const pageview = (url: string) => {
   }
 };
 
-// GA4 커스텀 이벤트 전송
+// GA4 이벤트 추적
 export const event = (
   action: GAEventType,
-  parameters: {
-    event_category?: string;
-    event_label?: string;
-    value?: number;
-    // 타이머 관련 파라미터
-    timer_duration?: number;
-    task_count?: number;
-    completion_rate?: number;
-    set_name?: string;
-    task_name?: string;
-    // 사용자 환경 정보
-    user_session_id?: string;
-    browser_info?: string;
-    screen_resolution?: string;
-    // 커스텀 파라미터
-    [key: string]: any;
-  } = {}
+  parameters: GAEventParameters = {}
 ) => {
   // 개발 모드에서는 콘솔에만 로그
   if (!isGAEnabled()) {
@@ -70,13 +83,16 @@ export const event = (
   }
 };
 
-// GA4 사용자 속성 설정
-export const setUserProperties = (properties: {
+// GA4 사용자 속성 타입 정의
+export interface GAUserProperties {
   user_type?: 'new_user' | 'returning_user';
   preferred_timer_duration?: string;
   avg_tasks_per_session?: number;
-  [key: string]: any;
-}) => {
+  [key: string]: string | number | boolean | undefined;
+}
+
+// GA4 사용자 속성 설정
+export const setUserProperties = (properties: GAUserProperties) => {
   if (typeof window !== 'undefined' && window.gtag) {
     window.gtag('set', 'user_properties', properties);
   }
@@ -88,7 +104,7 @@ declare global {
     gtag: (
       command: 'config' | 'event' | 'set',
       targetId: string | GAEventType,
-      parameters?: any
+      parameters?: GAEventParameters | GAUserProperties
     ) => void;
   }
 } 

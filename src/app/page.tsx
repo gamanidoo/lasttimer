@@ -22,13 +22,79 @@ import {
   logSetDelete,
   logTaskAdd,
   logTaskDelete,
-  logTaskUpdate,
-  LogService
+  logTaskUpdate
 } from '@/utils/logService';
-import { event as gtag_event } from '@/utils/gtag';
 
 // 더 다양한 고채도/명도/색상 팔레트
 const COLORS = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFD166', '#8338EC', '#FF9F1C', '#118AB2', '#06D6A0', '#EF476F', '#073B4C'];
+
+// 마지막 실행 타이머 설정 저장 키
+const LAST_TIMER_CONFIG_KEY = 'lastTimerConfig';
+
+// 마지막 타이머 설정 저장/불러오기 함수들
+const saveLastTimerConfig = (endTime: { hours: number; minutes: number }, tasks: Task[]) => {
+  try {
+    const config = {
+      endTime,
+      tasks,
+      timestamp: Date.now()
+    };
+    localStorage.setItem(LAST_TIMER_CONFIG_KEY, JSON.stringify(config));
+  } catch (error) {
+    console.log('마지막 타이머 설정 저장 실패:', error);
+  }
+};
+
+const getLastTimerConfig = () => {
+  // 브라우저에서만 localStorage 접근
+  if (typeof window === 'undefined') return null;
+  
+  try {
+    const saved = localStorage.getItem(LAST_TIMER_CONFIG_KEY);
+    if (saved) {
+      const config = JSON.parse(saved);
+      return {
+        endTime: config.endTime,
+        tasks: config.tasks || []
+      };
+    }
+  } catch (error) {
+    console.log('마지막 타이머 설정 불러오기 실패:', error);
+  }
+  return null;
+};
+
+const getDefaultConfig = () => {
+  const lastConfig = getLastTimerConfig();
+  
+  if (lastConfig && lastConfig.tasks.length > 0) {
+    return lastConfig;
+  }
+  
+  // 기본 설정
+  const defaultTime = addHours(new Date(), 1);
+  return {
+    endTime: {
+      hours: defaultTime.getHours(),
+      minutes: defaultTime.getMinutes()
+    },
+    tasks: [
+      { name: '작업 1', percentage: 33.33, color: '#FF6B6B', id: '1', duration: 20 },
+      { name: '작업 2', percentage: 33.33, color: '#4ECDC4', id: '2', duration: 20 },
+      { name: '작업 3', percentage: 33.34, color: '#45B7D1', id: '3', duration: 20 }
+    ]
+  };
+};
+
+// Window 타입 확장
+declare global {
+  interface Window {
+    toggleAdminMode: () => void;
+    activateAdminMode: () => void;
+    deactivateAdminMode: () => void;
+    checkAdminMode: () => boolean;
+  }
+}
 
 export default function Home() {
   // 관리자 모드 상태
@@ -36,27 +102,22 @@ export default function Home() {
   const [keySequence, setKeySequence] = useState<string[]>([]);
   const [titleClickCount, setTitleClickCount] = useState(0);
 
-  // 초기 시간 설정
+  // 초기 설정 (마지막 실행한 타이머 설정 또는 기본값)
   const [endTime, setEndTime] = useState<{ hours: number; minutes: number }>(() => {
-    const defaultTime = addHours(new Date(), 1);
-    return {
-      hours: defaultTime.getHours(),
-      minutes: defaultTime.getMinutes()
-    };
+    return getDefaultConfig().endTime;
   });
   
   const [startTime, setStartTime] = useState<Date | null>(null);
   const [actualEndTime, setActualEndTime] = useState<Date | null>(null); // 실제 종료 시간 추가
   
-  // 기본 작업 설정
-  const [tasks, setTasks] = useState<Task[]>(() => [
-    { name: '작업 1', percentage: 33.33, color: '#FF6B6B', id: '1', duration: 20 },
-    { name: '작업 2', percentage: 33.33, color: '#4ECDC4', id: '2', duration: 20 },
-    { name: '작업 3', percentage: 33.34, color: '#45B7D1', id: '3', duration: 20 }
-  ]);
+  // 작업 설정 (마지막 실행한 타이머 설정 또는 기본값)
+  const [tasks, setTasks] = useState<Task[]>(() => {
+    return getDefaultConfig().tasks;
+  });
 
   const [isRunning, setIsRunning] = useState(false);
   const [isComplete, setIsComplete] = useState(false);
+
   const [hasNotificationPermission, setHasNotificationPermission] = useState(false);
   const [currentTaskId, setCurrentTaskId] = useState<string | null>(null); // eslint-disable-line @typescript-eslint/no-unused-vars
   const [isTimeSelectVisible, setIsTimeSelectVisible] = useState(false);
@@ -67,144 +128,95 @@ export default function Home() {
 
   const timeSelectorRef = useRef<HTMLDivElement>(null);
 
-  // 관리자 모드 키보드 이벤트 처리
+  // 관리자 모드 토글
+  const toggleAdminMode = useCallback(() => {
+    setIsAdminMode(prev => {
+      const newState = !prev;
+      if (newState) {
+        sessionStorage.setItem('adminMode', 'true');
+        console.log('🔓 관리자 모드 활성화!');
+        console.log('📊 "사용 통계" 버튼이 나타났습니다. 클릭하여 모든 사용자 로그를 확인하세요!');
+      } else {
+        sessionStorage.removeItem('adminMode');
+        console.log('🔒 관리자 모드 비활성화!');
+      }
+      return newState;
+    });
+  }, []);
+
+  // 키보드 이벤트 리스너
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      // 모든 키 이벤트 로깅 (디버깅용)
-      if (event.ctrlKey || event.shiftKey || event.metaKey) {
-        console.log(`키 이벤트: ${event.key} (Ctrl: ${event.ctrlKey}, Shift: ${event.shiftKey}, Meta: ${event.metaKey})`);
-      }
-
-      // Ctrl + Shift + A 조합으로 관리자 모드 토글 (대소문자 관계없이)
-      if (event.ctrlKey && event.shiftKey && (event.key === 'A' || event.key === 'a')) {
+      // Ctrl+Shift+A 또는 Ctrl+Alt+A
+      if ((event.ctrlKey && event.shiftKey && event.key === 'A') ||
+          (event.ctrlKey && event.altKey && event.key === 'A')) {
         event.preventDefault();
-        console.log('🔑 관리자 모드 단축키 감지됨 (Ctrl+Shift+A)');
         toggleAdminMode();
-        return;
       }
-
-      // 대안 1: Ctrl + Alt + A 조합
-      if (event.ctrlKey && event.altKey && (event.key === 'A' || event.key === 'a')) {
-        event.preventDefault();
-        console.log('🔑 관리자 모드 단축키 감지됨 (Ctrl+Alt+A)');
-        toggleAdminMode();
-        return;
-      }
-
-      // 대안 2: 특별한 키 시퀀스 (admin)
+      
+      // "admin" 시퀀스 체크
       setKeySequence(prev => {
-        const newSequence = [...prev, event.key.toLowerCase()].slice(-5);
-        console.log(`키 시퀀스: ${newSequence.join('')}`);
+        const newSequence = [...prev, event.key.toLowerCase()];
+        const sequenceString = newSequence.join('');
         
-        if (newSequence.join('') === 'admin') {
-          console.log('🔑 관리자 모드 키 시퀀스 감지됨 (admin)');
+        if (sequenceString.includes('admin')) {
           toggleAdminMode();
           return [];
         }
         
-        return newSequence;
+        // 시퀀스가 너무 길어지면 초기화
+        return newSequence.length > 10 ? [] : newSequence;
       });
     };
 
-    console.log('🔧 키보드 이벤트 리스너 등록됨');
     window.addEventListener('keydown', handleKeyDown);
-    
-    return () => {
-      console.log('🔧 키보드 이벤트 리스너 해제됨');
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, []);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [toggleAdminMode]);
 
-  // 관리자 모드 토글
-  const toggleAdminMode = useCallback(() => {
-    setIsAdminMode(prev => {
-      const newMode = !prev;
-      if (newMode) {
-        console.log('🔓 관리자 모드가 활성화되었습니다.');
-        sessionStorage.setItem('adminMode', 'true');
-        
-        // GA4 이벤트 전송
-        gtag_event('admin_mode_activate', {
-          event_label: '관리자_모드_활성화',
-          method: 'manual_toggle',
-          timestamp: new Date().toISOString()
-        });
-        
-        setTimeout(() => {
-          console.log('✅ 관리자 모드 활성화 완료!');
-          console.log('📊 "사용 통계" 버튼을 클릭하여 모든 사용자의 로그를 확인하세요.');
-          console.log('🌍 이제 GA4에서도 실시간으로 모든 사용자 데이터를 확인할 수 있습니다!');
-        }, 100);
-      } else {
-        console.log('🔒 관리자 모드가 비활성화되었습니다.');
-        sessionStorage.removeItem('adminMode');
-        setTimeout(() => {
-          console.log('✅ 관리자 모드 비활성화 완료!');
-        }, 100);
-      }
-      return newMode;
-    });
-    setTitleClickCount(0); // 클릭 카운트 리셋
-  }, []);
-
-  // 타이틀 클릭 핸들러 (히든 관리자 모드 접근)
-  const handleTitleClick = () => {
-    if (isAdminMode) return; // 이미 관리자 모드면 무시
-    
-    setTitleClickCount(prev => {
-      const newCount = prev + 1;
-      console.log(`타이틀 클릭 횟수: ${newCount}/5`);
-      
-      // 진행도 피드백
-      if (newCount === 3) {
-        console.log('🔓 관리자 모드까지 2번 더 클릭하세요!');
-      } else if (newCount === 4) {
-        console.log('🔓 관리자 모드까지 1번 더 클릭하세요!');
-      }
-      
-      if (newCount >= 5) {
-        console.log('🔑 타이틀 5회 클릭으로 관리자 모드 활성화');
-        toggleAdminMode();
-        return 0;
-      }
-      
-      // 3초 후 카운트 리셋
-      setTimeout(() => {
-        setTitleClickCount(0);
-      }, 3000);
-      
-      return newCount;
-    });
-  };
-
-  // 페이지 로드 시 세션에서 관리자 모드 상태 복원
+  // 브라우저 새로고침시 관리자 모드 복원
   useEffect(() => {
     const savedAdminMode = sessionStorage.getItem('adminMode');
     if (savedAdminMode === 'true') {
       setIsAdminMode(true);
-      console.log('🔓 관리자 모드가 복원되었습니다.');
-    }
-
-    // 개발자를 위한 관리자 모드 안내 (한 번만 표시)
-    if (!localStorage.getItem('adminModeGuideShown')) {
-      console.log('🔑 관리자 모드 접근 방법:');
-      console.log('1. Ctrl + Shift + A (또는 Ctrl + Alt + A)');
-      console.log('2. "admin" 키 순서대로 입력');
-      console.log('3. 타이틀을 5번 연속 클릭');
-      console.log('4. 콘솔에서 activateAdminMode() 직접 실행 ⭐ 추천!');
-      console.log('');
-      console.log('📊 관리자 모드에서는 로컬 + GA4 데이터를 모두 확인할 수 있습니다.');
-      console.log('🌍 GA4 설정: docs/ga4-setup.md 참고');
-      console.log('🚀 지금 바로 시도해보세요: activateAdminMode()');
-      localStorage.setItem('adminModeGuideShown', 'true');
     }
   }, []);
+
+  // 제목 클릭 핸들러
+  const handleTitleClick = () => {
+    setTitleClickCount(0); // 클릭 카운트 리셋
+    
+    // 클릭 카운트 증가 및 5회 체크
+    const currentCount = titleClickCount + 1;
+    console.log(`제목 클릭: ${currentCount}/5`);
+    
+    setTitleClickCount(prev => {
+      const newCount = prev + 1;
+      if (newCount >= 5) {
+        toggleAdminMode();
+        console.log('🎉 제목을 5번 클릭하여 관리자 모드가 활성화되었습니다!');
+        return 0; // 카운트 리셋
+      }
+      return newCount;
+    });
+    
+    // 3초 후 카운트 리셋
+    setTimeout(() => {
+      setTitleClickCount(0);
+    }, 3000);
+  };
+
+  // 관리자 모드 디버깅 - 현재 키 시퀀스와 클릭 카운트 확인
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'development') {
+      console.log('Debug - keySequence:', keySequence.join(''), 'titleClickCount:', titleClickCount);
+    }
+  }, [keySequence, titleClickCount]);
 
   // 관리자 모드 함수를 전역으로 노출
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      (window as any).toggleAdminMode = toggleAdminMode;
-      (window as any).activateAdminMode = () => {
+      window.toggleAdminMode = toggleAdminMode;
+      window.activateAdminMode = () => {
         setIsAdminMode(true);
         sessionStorage.setItem('adminMode', 'true');
         console.log('🔓 관리자 모드가 활성화되었습니다! (콘솔에서 실행됨)');
@@ -219,17 +231,17 @@ export default function Home() {
           }
         }, 500);
       };
-      (window as any).deactivateAdminMode = () => {
+      window.deactivateAdminMode = () => {
         setIsAdminMode(false);
         sessionStorage.removeItem('adminMode');
         console.log('🔒 관리자 모드가 비활성화되었습니다!');
       };
-      (window as any).checkAdminMode = () => {
+      window.checkAdminMode = () => {
         console.log(`현재 관리자 모드 상태: ${isAdminMode ? '🔓 활성화됨' : '🔒 비활성화됨'}`);
         return isAdminMode;
       };
     }
-  }, [toggleAdminMode, isAdminMode]);
+  }, [isAdminMode, toggleAdminMode]);
 
   // 총 시간 계산 (분)
   const calculateTotalMinutes = () => {
@@ -375,6 +387,9 @@ export default function Home() {
     setIsTimeSelectVisible(false);
     setIsTaskFormVisible(false);
     
+    // 현재 타이머 설정을 마지막 실행 설정으로 저장
+    saveLastTimerConfig(endTime, tasks);
+    
     // 타이머 시작 로그
     logTimerStart(totalMinutes, tasks.length);
   };
@@ -385,16 +400,14 @@ export default function Home() {
       logTimerReset(initialTotalMinutes, tasks.length);
     }
     
-    const defaultTime = addHours(new Date(), 1);
+    // 마지막 실행한 타이머 설정 또는 기본값으로 복원
+    const defaultConfig = getDefaultConfig();
     setIsRunning(false);
     setIsComplete(false);
-    setEndTime({
-      hours: defaultTime.getHours(),
-      minutes: defaultTime.getMinutes()
-    });
+    setEndTime(defaultConfig.endTime);
     setStartTime(null);
     setActualEndTime(null); // 실제 종료 시간도 초기화
-    setTasks([]);
+    setTasks(defaultConfig.tasks);
     setCurrentTaskId(null);
     setIsTimeSelectVisible(false);
     setIsTaskFormVisible(false);
