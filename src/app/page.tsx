@@ -349,20 +349,24 @@ export default function Home() {
     }
 
     const nextTaskIndex = tasks.findIndex(t => t.id === taskId) + 1;
-    if (nextTaskIndex >= tasks.length) {
-      // 타이머 완료 시 실제 종료 시간 기록
-      const endTime = new Date();
-      setActualEndTime(endTime);
-      setIsComplete(true);
-      setIsRunning(false); // 타이머 중지
-      
-      // 타이머 완료 로그
-      if (startTime) {
-        const actualDuration = Math.round((endTime.getTime() - startTime.getTime()) / 60000);
-        logTimerComplete(initialTotalMinutes, tasks.length, actualDuration);
-      }
-    } else {
+    if (nextTaskIndex < tasks.length) {
+      // 다음 작업으로 전환 (마지막 작업이 아닌 경우에만)
       setCurrentTaskId(tasks[nextTaskIndex].id);
+    }
+    // 타이머 완료 처리는 CircleTimer에서 총 시간 기준으로 처리
+  };
+
+  const handleTimerComplete = () => {
+    // 타이머 완료 시 실제 종료 시간 기록
+    const endTime = new Date();
+    setActualEndTime(endTime);
+    setIsComplete(true);
+    setIsRunning(false); // 타이머 중지
+    
+    // 타이머 완료 로그
+    if (startTime) {
+      const actualDuration = Math.round((endTime.getTime() - startTime.getTime()) / 60000);
+      logTimerComplete(initialTotalMinutes, tasks.length, actualDuration);
     }
   };
 
@@ -586,6 +590,7 @@ export default function Home() {
           isRunning={isRunning}
           totalMinutes={taskTotalMinutes}
           onTaskComplete={handleTaskComplete}
+          onTimerComplete={handleTimerComplete}
           endTime={endTime}
           onTaskCountChange={handleTaskCountChange}
           onTimeClick={handleTimeClick}

@@ -7,6 +7,7 @@ interface CircleTimerProps {
   isRunning: boolean;
   totalMinutes: number;
   onTaskComplete: (taskId: string) => void;
+  onTimerComplete?: () => void; // 타이머 완료 콜백 추가
   endTime: { hours: number; minutes: number };
   onTaskCountChange: (type: 'add' | 'remove') => void;
   onTimeClick: (e: React.MouseEvent) => void;
@@ -27,26 +28,14 @@ function getTaskPercentages(tasks: Task[], totalMinutes: number): number[] {
   });
 }
 
-// 경과 시간 기준 현재 작업 인덱스 계산
-function getCurrentTaskIndex(tasks: Task[], elapsedMinutes: number): number {
-  let acc = 0;
-  for (let i = 0; i < tasks.length; i++) {
-    const task = tasks[i];
-    // 초 단위가 있으면 초 우선 사용
-    const taskMinutes = task.seconds ? task.seconds / 60 : (task.duration ?? 0);
-    if (elapsedMinutes < acc + taskMinutes) {
-      return i;
-    }
-    acc += taskMinutes;
-  }
-  return tasks.length - 1;
-}
+// getCurrentTaskIndex 함수 제거 - currentTaskIndexRef.current를 직접 사용
 
 export const CircleTimer = ({
   tasks,
   isRunning,
   totalMinutes,
   onTaskComplete,
+  onTimerComplete,
   endTime,
   onTaskCountChange, // eslint-disable-line @typescript-eslint/no-unused-vars
   onTimeClick,
@@ -97,15 +86,31 @@ export const CircleTimer = ({
       const elapsed = calculateElapsedTime();
       setElapsedMinutes(elapsed);
       
-      // 종료 시각 체크
-      if (!hasEndedRef.current) {
-        if (elapsed >= totalMinutes) {
-          hasEndedRef.current = true;
-          // 마지막 작업 완료 처리
-          if (tasks.length > 0) {
-            onTaskComplete(tasks[tasks.length - 1].id);
+      // 작업 전환 체크
+      if (!hasEndedRef.current && tasks.length > 0) {
+        let accumulatedMinutes = 0;
+        
+        for (let i = 0; i < tasks.length; i++) {
+          const task = tasks[i];
+          const taskDuration = (task.percentage / 100) * totalMinutes;
+          accumulatedMinutes += taskDuration;
+          
+          // 현재 작업이 완료되었고 아직 처리되지 않은 경우
+          if (elapsed >= accumulatedMinutes && currentTaskIndexRef.current === i) {
+            currentTaskIndexRef.current = i + 1;
+            onTaskComplete(task.id);
+            break;
           }
         }
+        
+                 // 전체 타이머 완료 체크
+         if (elapsed >= totalMinutes) {
+           hasEndedRef.current = true;
+           // 타이머 완료 콜백 호출
+           if (onTimerComplete) {
+             onTimerComplete();
+           }
+         }
       }
 
       lastUpdateRef.current = Date.now();
@@ -149,54 +154,11 @@ export const CircleTimer = ({
     }
   }, [isRunning]);
 
-  // 작업 진행 상태 체크 및 작업 전환
-  useEffect(() => {
-    if (!isRunning || tasks.length === 0 || !startTime) return;
-
-    const checkTaskProgress = () => {
-      const now = new Date();
-      let accumulatedMinutes = 0;
-      
-      for (let i = 0; i < tasks.length; i++) {
-        const task = tasks[i];
-        const taskDuration = (task.percentage / 100) * totalMinutes;
-        accumulatedMinutes += taskDuration;
-        
-        // 작업 완료 예정 시각 계산
-        const taskEndTime = new Date(startTime.getTime() + accumulatedMinutes * 60 * 1000);
-        
-        // 현재 시각이 작업 완료 예정 시각을 지났고, 아직 완료 처리되지 않은 경우
-        if (now >= taskEndTime && currentTaskIndexRef.current === i) {
-          currentTaskIndexRef.current = i + 1;
-          onTaskComplete(task.id);
-          break;
-        }
-      }
-    };
-
-    const interval = setInterval(checkTaskProgress, 1000);
-
-    // Page Visibility API를 사용하여 백그라운드/포그라운드 전환 감지
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        checkTaskProgress();
-      }
-    };
-
-    // 포커스 이벤트 처리 추가
-    const handleFocus = () => {
-      checkTaskProgress();
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('focus', handleFocus);
-
-    return () => {
-      clearInterval(interval);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('focus', handleFocus);
-    };
-  }, [isRunning, tasks, totalMinutes, startTime, onTaskComplete]);
+  // 작업 진행 상태 체크 및 작업 전환 로직 제거 (중복 제거)
+  // useEffect(() => {
+  //   if (!isRunning || tasks.length === 0 || !startTime) return;
+  //   ...
+  // }, [isRunning, tasks, totalMinutes, startTime, onTaskComplete]);
 
   // 미작동(대기) 상태에서도 1분마다 현재시간 업데이트
   useEffect(() => {
@@ -267,18 +229,22 @@ export const CircleTimer = ({
     duration: task.minutes ?? task.duration ?? (totalMinutes * percentages[idx] / 100)
   }));
 
-  // 현재 작업 인덱스 계산
-  const currentTaskIndex = getCurrentTaskIndex(displayTasks, elapsedMinutes);
+  // 현재 작업 인덱스 (실제 작업 전환 상태와 동기화)
+  const currentTaskIndex = isRunning ? currentTaskIndexRef.current : 0;
 
   // 중앙 텍스트(현재 작업/남은 시간)
   const currentTask = displayTasks[currentTaskIndex];
   let currentTaskRemaining = 0;
-  if (currentTask) {
-    let acc = 0;
+  if (currentTask && isRunning) {
+    // 작업 전환 로직과 동일한 방식으로 계산 (percentage 기반)
+    let accumulatedMinutes = 0;
     for (let i = 0; i < currentTaskIndex; i++) {
-      acc += displayTasks[i].duration ?? 0;
+      const taskDuration = (displayTasks[i].percentage / 100) * totalMinutes;
+      accumulatedMinutes += taskDuration;
     }
-    currentTaskRemaining = (currentTask.duration ?? 0) - (elapsedMinutes - acc);
+    const currentTaskDuration = (currentTask.percentage / 100) * totalMinutes;
+    const currentTaskElapsed = elapsedMinutes - accumulatedMinutes;
+    currentTaskRemaining = currentTaskDuration - currentTaskElapsed;
     if (currentTaskRemaining < 0) currentTaskRemaining = 0;
   }
 
