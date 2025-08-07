@@ -11,7 +11,13 @@ export const StatisticsView = ({ isVisible, onClose }: StatisticsViewProps) => {
   const [overallStats, setOverallStats] = useState<UserStatistics | null>(null);
   const [todayStats, setTodayStats] = useState<UserStatistics | null>(null);
   const [globalStats, setGlobalStats] = useState<UserStatistics | null>(null);
-  const [setAnalysis, setSetAnalysis] = useState<any>(null);
+  const [setAnalysis, setSetAnalysis] = useState<{
+    totalSets: number;
+    mostUsedSet: string | null;
+    averageTasks: number;
+    averageDuration: number;
+    setUsageCount: Record<string, number>;
+  } | null>(null);
   const [activeTab, setActiveTab] = useState<'overall' | 'today' | 'global' | 'sets'>('overall');
 
   useEffect(() => {

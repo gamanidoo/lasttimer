@@ -49,7 +49,15 @@ export interface LogEvent {
     taskName?: string;
     
     // 추가 메타데이터
-    [key: string]: any;
+    actualDuration?: number;
+    sessionId?: string;
+    userAgent?: string;
+    language?: string;
+    platform?: string;
+    screenResolution?: string;
+    timezone?: string;
+    updates?: string[];
+    [key: string]: unknown;
   };
 }
 

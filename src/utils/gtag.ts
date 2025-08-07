@@ -52,7 +52,7 @@ export const event = (
     browser_info?: string;
     screen_resolution?: string;
     // 커스텀 파라미터
-    [key: string]: any;
+    [key: string]: unknown;
   } = {}
 ) => {
   // 개발 모드에서는 콘솔에만 로그
@@ -75,7 +75,7 @@ export const setUserProperties = (properties: {
   user_type?: 'new_user' | 'returning_user';
   preferred_timer_duration?: string;
   avg_tasks_per_session?: number;
-  [key: string]: any;
+  [key: string]: unknown;
 }) => {
   if (typeof window !== 'undefined' && window.gtag) {
     window.gtag('set', 'user_properties', properties);
@@ -88,7 +88,7 @@ declare global {
     gtag: (
       command: 'config' | 'event' | 'set',
       targetId: string | GAEventType,
-      parameters?: any
+      parameters?: Record<string, unknown>
     ) => void;
   }
 } 

@@ -143,7 +143,7 @@ export const CircleTimer = ({
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('focus', handleFocus);
     };
-  }, [isRunning, startTime, endTime, tasks, totalMinutes, onTaskComplete]);
+  }, [isRunning, startTime, endTime, tasks, totalMinutes, onTaskComplete, onTimerComplete]);
 
   // 타이머 시작 또는 초기화 시 hasEndedRef와 currentTaskIndexRef 리셋
   useEffect(() => {

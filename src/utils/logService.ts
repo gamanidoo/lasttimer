@@ -1,5 +1,5 @@
 import type { LogEvent, LogEventType, UserStatistics, TimerSet, Task } from '@/types/task';
-import { event as gtag_event, setUserProperties } from '@/utils/gtag';
+import { event as gtag_event } from '@/utils/gtag';
 
 const LOG_STORAGE_KEY = 'timerAppLogs';
 const STATS_STORAGE_KEY = 'timerAppStats';
@@ -79,7 +79,7 @@ export class LogService {
   private static sendToGA4(type: LogEventType, logEvent: LogEvent): void {
     try {
       // GA4 이벤트 파라미터 구성
-      const gaParams: any = {
+      const gaParams: Record<string, unknown> = {
         user_session_id: logEvent.data.sessionId,
         browser_info: logEvent.data.userAgent?.split(' ')[0] || 'Unknown',
         screen_resolution: logEvent.data.screenResolution,
@@ -179,7 +179,7 @@ export class LogService {
       const logs = localStorage.getItem(LOG_STORAGE_KEY);
       if (!logs) return [];
       
-      return JSON.parse(logs).map((log: any) => ({
+      return JSON.parse(logs).map((log: LogEvent) => ({
         ...log,
         timestamp: new Date(log.timestamp)
       }));
@@ -197,7 +197,7 @@ export class LogService {
       const logs = localStorage.getItem(GLOBAL_LOG_STORAGE_KEY);
       if (!logs) return [];
       
-      return JSON.parse(logs).map((log: any) => ({
+      return JSON.parse(logs).map((log: LogEvent) => ({
         ...log,
         timestamp: new Date(log.timestamp)
       }));
@@ -359,7 +359,7 @@ export class LogService {
         return defaultStats;
       }
       
-      const parsed = JSON.parse(stats);
+      const parsed = JSON.parse(stats) as UserStatistics;
       return {
         ...parsed,
         firstUsed: new Date(parsed.firstUsed),
@@ -403,7 +403,7 @@ export class LogService {
         return defaultStats;
       }
       
-      const parsed = JSON.parse(stats);
+      const parsed = JSON.parse(stats) as UserStatistics;
       return {
         ...parsed,
         firstUsed: new Date(parsed.firstUsed),

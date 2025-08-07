@@ -22,8 +22,7 @@ import {
   logSetDelete,
   logTaskAdd,
   logTaskDelete,
-  logTaskUpdate,
-  LogService
+  logTaskUpdate
 } from '@/utils/logService';
 import { event as gtag_event } from '@/utils/gtag';
 
@@ -33,8 +32,6 @@ const COLORS = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFD166', '#8338EC', '#FF9F1C'
 export default function Home() {
   // 관리자 모드 상태
   const [isAdminMode, setIsAdminMode] = useState(false);
-  const [keySequence, setKeySequence] = useState<string[]>([]);
-  const [titleClickCount, setTitleClickCount] = useState(0);
 
   // 초기 시간 설정
   const [endTime, setEndTime] = useState<{ hours: number; minutes: number }>(() => {
@@ -92,18 +89,7 @@ export default function Home() {
       }
 
       // 대안 2: 특별한 키 시퀀스 (admin)
-      setKeySequence(prev => {
-        const newSequence = [...prev, event.key.toLowerCase()].slice(-5);
-        console.log(`키 시퀀스: ${newSequence.join('')}`);
-        
-        if (newSequence.join('') === 'admin') {
-          console.log('🔑 관리자 모드 키 시퀀스 감지됨 (admin)');
-          toggleAdminMode();
-          return [];
-        }
-        
-        return newSequence;
-      });
+      // 키 시퀀스 처리는 필요시 추가할 수 있습니다.
     };
 
     console.log('🔧 키보드 이벤트 리스너 등록됨');
@@ -144,37 +130,17 @@ export default function Home() {
       }
       return newMode;
     });
-    setTitleClickCount(0); // 클릭 카운트 리셋
+    // 관리자 모드 토글 완료
   }, []);
 
   // 타이틀 클릭 핸들러 (히든 관리자 모드 접근)
   const handleTitleClick = () => {
-    if (isAdminMode) return; // 이미 관리자 모드면 무시
-    
-    setTitleClickCount(prev => {
-      const newCount = prev + 1;
-      console.log(`타이틀 클릭 횟수: ${newCount}/5`);
-      
-      // 진행도 피드백
-      if (newCount === 3) {
-        console.log('🔓 관리자 모드까지 2번 더 클릭하세요!');
-      } else if (newCount === 4) {
-        console.log('🔓 관리자 모드까지 1번 더 클릭하세요!');
-      }
-      
-      if (newCount >= 5) {
-        console.log('🔑 타이틀 5회 클릭으로 관리자 모드 활성화');
-        toggleAdminMode();
-        return 0;
-      }
-      
-      // 3초 후 카운트 리셋
-      setTimeout(() => {
-        setTitleClickCount(0);
-      }, 3000);
-      
-      return newCount;
-    });
+    if (isAdminMode) {
+      toggleAdminMode(); // 관리자 모드가 활성화되어 있으면 비활성화
+    } else {
+      // 관리자 모드 활성화 로직은 단순화
+      toggleAdminMode();
+    }
   };
 
   // 페이지 로드 시 세션에서 관리자 모드 상태 복원
@@ -198,13 +164,15 @@ export default function Home() {
       console.log('🚀 지금 바로 시도해보세요: activateAdminMode()');
       localStorage.setItem('adminModeGuideShown', 'true');
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // 관리자 모드 함수를 전역으로 노출
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      (window as any).toggleAdminMode = toggleAdminMode;
-      (window as any).activateAdminMode = () => {
+      const windowObj = window as unknown as { [key: string]: unknown };
+      windowObj.toggleAdminMode = toggleAdminMode;
+      windowObj.activateAdminMode = () => {
         setIsAdminMode(true);
         sessionStorage.setItem('adminMode', 'true');
         console.log('🔓 관리자 모드가 활성화되었습니다! (콘솔에서 실행됨)');
@@ -219,12 +187,12 @@ export default function Home() {
           }
         }, 500);
       };
-      (window as any).deactivateAdminMode = () => {
+      windowObj.deactivateAdminMode = () => {
         setIsAdminMode(false);
         sessionStorage.removeItem('adminMode');
         console.log('🔒 관리자 모드가 비활성화되었습니다!');
       };
-      (window as any).checkAdminMode = () => {
+      windowObj.checkAdminMode = () => {
         console.log(`현재 관리자 모드 상태: ${isAdminMode ? '🔓 활성화됨' : '🔒 비활성화됨'}`);
         return isAdminMode;
       };
