@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import type { TimerSet, Task } from '../types/task';
+import { createShareUrl, copyToClipboard } from '@/utils/shareUtils';
+import { event as gtag_event } from '@/utils/gtag';
 
 interface SavedSetsProps {
   onLoadSet: (timerSet: TimerSet) => void;
@@ -12,6 +14,7 @@ export const SavedSets = ({ onLoadSet, onDeleteSet, refreshKey }: SavedSetsProps
   const [isVisible, setIsVisible] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [editData, setEditData] = useState<Partial<TimerSet> | null>(null);
+  const [shareMessage, setShareMessage] = useState<string>('');
 
   useEffect(() => {
     const loadSavedSets = () => {
@@ -81,6 +84,39 @@ export const SavedSets = ({ onLoadSet, onDeleteSet, refreshKey }: SavedSetsProps
     return `${mins}분`;
   };
 
+  // 🆕 새로운 간단한 공유 핸들러
+  const handleShare = async (timerSet: TimerSet) => {
+    try {
+      console.log('🚀 저장된 세트 공유 시작:', timerSet.name);
+      
+      const shareUrl = createShareUrl(timerSet);
+      const success = await copyToClipboard(shareUrl);
+      
+      if (success) {
+        setShareMessage('✅ 공유 링크가 클립보드에 복사되었습니다!');
+        console.log('✅ 공유 URL:', shareUrl);
+        
+        // GA4 이벤트 로깅
+        gtag_event('set_share_copy', {
+          event_label: '세트_공유_복사',
+          set_name: timerSet.name,
+          task_count: timerSet.tasks.length,
+          total_minutes: timerSet.totalMinutes
+        });
+      } else {
+        setShareMessage('❌ 클립보드 복사에 실패했습니다.');
+      }
+      
+      // 3초 후 메시지 제거
+      setTimeout(() => setShareMessage(''), 3000);
+      
+    } catch (error) {
+      console.error('❌ 공유 실패:', error);
+      setShareMessage('❌ 공유 링크 생성에 실패했습니다.');
+      setTimeout(() => setShareMessage(''), 3000);
+    }
+  };
+
   if (!isVisible) {
     return (
       <button
@@ -104,6 +140,13 @@ export const SavedSets = ({ onLoadSet, onDeleteSet, refreshKey }: SavedSetsProps
             ✕
           </button>
         </div>
+        
+        {/* 공유 메시지 */}
+        {shareMessage && (
+          <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+            <p className="text-sm text-green-700">{shareMessage}</p>
+          </div>
+        )}
         
         {savedSets.length === 0 ? (
           <p className="text-gray-500 text-center py-8">저장된 세트가 없습니다.</p>
@@ -193,6 +236,13 @@ export const SavedSets = ({ onLoadSet, onDeleteSet, refreshKey }: SavedSetsProps
                     <div className="flex justify-between items-start mb-2">
                       <h3 className="font-semibold text-lg text-black">{set.name}</h3>
                       <div className="flex gap-2">
+                        <button
+                          onClick={() => handleShare(set)}
+                          className="text-green-500 hover:text-green-700 text-sm"
+                          title="공유 링크 복사"
+                        >
+                          공유
+                        </button>
                         <button
                           onClick={() => handleEdit(set)}
                           className="text-blue-500 hover:text-blue-700 text-sm"

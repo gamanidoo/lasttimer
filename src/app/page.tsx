@@ -25,6 +25,7 @@ import {
   logTaskUpdate
 } from '@/utils/logService';
 import { event as gtag_event } from '@/utils/gtag';
+import { getShareParamFromUrl, parseSharedTimerSet, createShareUrl, copyToClipboard } from '@/utils/shareUtils';
 
 // 더 다양한 고채도/명도/색상 팔레트
 const COLORS = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFD166', '#8338EC', '#FF9F1C', '#118AB2', '#06D6A0', '#EF476F', '#073B4C'];
@@ -61,6 +62,7 @@ export default function Home() {
   const [isSaveFormVisible, setIsSaveFormVisible] = useState(false);
   const [isStatsVisible, setIsStatsVisible] = useState(false);
   const [setsRefreshKey, setSetsRefreshKey] = useState(0);
+  const [shareMessage, setShareMessage] = useState<string>('');
 
   const timeSelectorRef = useRef<HTMLDivElement>(null);
 
@@ -166,6 +168,8 @@ export default function Home() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+
 
   // 관리자 모드 함수를 전역으로 노출
   useEffect(() => {
@@ -457,7 +461,7 @@ export default function Home() {
     logSetSave(timerSet);
   };
 
-  const handleLoadSet = (timerSet: TimerSet) => {
+  const handleLoadSet = useCallback((timerSet: TimerSet) => {
     // 현재 시각 기준으로 종료시각 계산
     const now = new Date();
     const end = new Date(now.getTime() + timerSet.totalMinutes * 60 * 1000);
@@ -472,7 +476,41 @@ export default function Home() {
     
     // 세트 로드 로그
     logSetLoad(timerSet);
-  };
+  }, []);
+
+  // 🆕 새로운 공유 URL 처리
+  useEffect(() => {
+    const shareParam = getShareParamFromUrl();
+    if (shareParam) {
+      console.log('🔗 공유 파라미터 발견:', shareParam);
+      
+      try {
+        const sharedTimerSet = parseSharedTimerSet(shareParam);
+        if (sharedTimerSet) {
+          console.log('✅ 공유된 타이머 세트 로드 성공:', sharedTimerSet.name);
+          
+          handleLoadSet(sharedTimerSet);
+          
+          // URL에서 공유 파라미터 제거
+          const url = new URL(window.location.href);
+          url.searchParams.delete('share');
+          window.history.replaceState({}, '', url.toString());
+          
+          // 성공 이벤트 로깅
+          gtag_event('set_shared_load', {
+            event_label: '공유_세트_로드_성공',
+            set_name: sharedTimerSet.name,
+            task_count: sharedTimerSet.tasks.length,
+            total_minutes: sharedTimerSet.totalMinutes
+          });
+        } else {
+          console.error('❌ 공유 URL 파싱 실패');
+        }
+      } catch (error) {
+        console.error('❌ 공유 URL 처리 오류:', error);
+      }
+    }
+  }, []);
 
   const handleDeleteSet = (id: string) => {
     const saved = localStorage.getItem('timerSets');
@@ -501,8 +539,56 @@ export default function Home() {
     setTasks(calculatePercentagesFromMinutes(newTasks, totalMinutes));
   };
 
-  // 테스크 시간 총합 계산
-  const taskTotalMinutes = tasks.reduce((sum, t) => (t.minutes ?? t.duration ?? 0) + sum, 0);
+  // 🗑️ 불필요한 taskTotalMinutes 계산 제거됨 - calculateTotalMinutes() 사용
+
+  // 🆕 새로운 간단한 공유 핸들러
+  const handleShareCurrentSet = async () => {
+    if (tasks.length === 0) {
+      setShareMessage('❌ 공유할 작업이 없습니다.');
+      setTimeout(() => setShareMessage(''), 3000);
+      return;
+    }
+
+    try {
+      console.log('🚀 공유 시작...');
+      
+      const currentSet: TimerSet = {
+        id: `current-${Date.now()}`,
+        name: '현재 타이머 설정',
+        tasks: tasks,
+        totalMinutes: calculateTotalMinutes(),
+        createdAt: new Date()
+      };
+
+      console.log('📊 공유할 데이터:', currentSet);
+
+      const shareUrl = createShareUrl(currentSet);
+      const copied = await copyToClipboard(shareUrl);
+      
+      if (copied) {
+        setShareMessage('✅ 공유 링크가 클립보드에 복사되었습니다!');
+        console.log('✅ 공유 URL:', shareUrl);
+        
+        // GA4 이벤트 로깅
+        gtag_event('set_share_copy', {
+          event_label: '현재_설정_공유',
+          set_name: currentSet.name,
+          task_count: currentSet.tasks.length,
+          total_minutes: currentSet.totalMinutes
+        });
+      } else {
+        setShareMessage('❌ 클립보드 복사에 실패했습니다.');
+      }
+      
+      // 3초 후 메시지 제거
+      setTimeout(() => setShareMessage(''), 3000);
+      
+    } catch (error) {
+      console.error('❌ 공유 실패:', error);
+      setShareMessage('❌ 공유 링크 생성에 실패했습니다.');
+      setTimeout(() => setShareMessage(''), 3000);
+    }
+  };
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -532,6 +618,12 @@ export default function Home() {
 
       {/* 상단 여백 (관리자 모드 바가 있을 때) */}
       <div className={isAdminMode ? 'mt-12' : ''}>
+        {/* 공유 메시지 */}
+        {shareMessage && (
+          <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg mx-4">
+            <p className="text-sm text-green-700 text-center">{shareMessage}</p>
+          </div>
+        )}
         <div className="flex items-center justify-center mb-8">
           <h1 
             className={`text-3xl font-bold text-center cursor-pointer select-none transition-colors ${
@@ -556,7 +648,7 @@ export default function Home() {
         <CircleTimer
           tasks={tasks}
           isRunning={isRunning}
-          totalMinutes={taskTotalMinutes}
+          totalMinutes={calculateTotalMinutes()}
           onTaskComplete={handleTaskComplete}
           onTimerComplete={handleTimerComplete}
           endTime={endTime}
@@ -585,15 +677,24 @@ export default function Home() {
         actualEndTime={actualEndTime}
       />
 
-      {/* 저장/불러오기 버튼들 */}
+      {/* 저장/불러오기/공유 버튼들 */}
       {!isRunning && !isComplete && (
-        <div className="flex justify-center gap-4 mb-8">
+        <div className="flex justify-center gap-4 mb-8 flex-wrap">
           <button
             onClick={() => setIsSaveFormVisible(true)}
             className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 transition-colors"
           >
             현재 설정 저장
           </button>
+          {tasks.length > 0 && (
+            <button
+              onClick={handleShareCurrentSet}
+              className="bg-orange-500 text-white px-4 py-2 rounded hover:bg-orange-600 transition-colors"
+              title="현재 설정을 공유 링크로 복사"
+            >
+              🔗 현재 설정 공유
+            </button>
+          )}
           <SavedSets onLoadSet={handleLoadSet} onDeleteSet={handleDeleteSet} refreshKey={setsRefreshKey} />
           {isAdminMode && (
             <button

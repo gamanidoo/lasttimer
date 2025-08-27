@@ -20,6 +20,8 @@ export type GAEventType =
   | 'set_save'
   | 'set_load'
   | 'set_delete'
+  | 'set_shared_load'
+  | 'set_share_copy'
   | 'task_add'
   | 'task_delete'
   | 'task_update'
