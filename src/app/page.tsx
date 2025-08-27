@@ -12,7 +12,7 @@ import { TimerButtons } from '@/components/TimerButtons';
 import { TimerHeader } from '@/components/TimerHeader';
 import { SavedSets } from '@/components/SavedSets';
 import { SaveSetForm } from '@/components/SaveSetForm';
-import { addHours } from 'date-fns';
+import { addHours, addMinutes } from 'date-fns';
 import { 
   logTimerStart, 
   logTimerComplete, 
@@ -34,12 +34,18 @@ export default function Home() {
   // 관리자 모드 상태
   const [isAdminMode, setIsAdminMode] = useState(false);
 
-  // 초기 시간 설정
+  // 초기 시간 설정 (현재 시간 + 1시간, 최소 5분 보장)
   const [endTime, setEndTime] = useState<{ hours: number; minutes: number }>(() => {
-    const defaultTime = addHours(new Date(), 1);
+    const now = new Date();
+    const defaultTime = addHours(now, 1);
+    
+    // 현재 시간 + 1시간이 5분 이내라면 추가로 조정
+    const minTime = new Date(now.getTime() + 5 * 60 * 1000);
+    const finalTime = defaultTime > minTime ? defaultTime : addMinutes(minTime, 55); // 1시간 보장
+    
     return {
-      hours: defaultTime.getHours(),
-      minutes: defaultTime.getMinutes()
+      hours: finalTime.getHours(),
+      minutes: finalTime.getMinutes()
     };
   });
   
@@ -56,7 +62,7 @@ export default function Home() {
   const [isRunning, setIsRunning] = useState(false);
   const [isComplete, setIsComplete] = useState(false);
   const [hasNotificationPermission, setHasNotificationPermission] = useState(false);
-  const [currentTaskId, setCurrentTaskId] = useState<string | null>(null); // eslint-disable-line @typescript-eslint/no-unused-vars
+
   const [isTimeSelectVisible, setIsTimeSelectVisible] = useState(false);
   const [isTaskFormVisible, setIsTaskFormVisible] = useState(false);
   const [isSaveFormVisible, setIsSaveFormVisible] = useState(false);
@@ -65,6 +71,40 @@ export default function Home() {
   const [shareMessage, setShareMessage] = useState<string>('');
 
   const timeSelectorRef = useRef<HTMLDivElement>(null);
+
+
+
+  // 관리자 모드 토글
+  const toggleAdminMode = useCallback(() => {
+    setIsAdminMode(prev => {
+      const newMode = !prev;
+      if (newMode) {
+        console.log('🔓 관리자 모드가 활성화되었습니다.');
+        sessionStorage.setItem('adminMode', 'true');
+        
+        // GA4 이벤트 전송
+        gtag_event('admin_mode_activate', {
+          event_label: '관리자_모드_활성화',
+          method: 'manual_toggle',
+          timestamp: new Date().toISOString()
+        });
+        
+        setTimeout(() => {
+          console.log('✅ 관리자 모드 활성화 완료!');
+          console.log('📊 "사용 통계" 버튼을 클릭하여 모든 사용자의 로그를 확인하세요.');
+          console.log('🌍 이제 GA4에서도 실시간으로 모든 사용자 데이터를 확인할 수 있습니다!');
+        }, 100);
+      } else {
+        console.log('🔒 관리자 모드가 비활성화되었습니다.');
+        sessionStorage.removeItem('adminMode');
+        setTimeout(() => {
+          console.log('✅ 관리자 모드 비활성화 완료!');
+        }, 100);
+      }
+      return newMode;
+    });
+    // 관리자 모드 토글 완료
+  }, []);
 
   // 관리자 모드 키보드 이벤트 처리
   useEffect(() => {
@@ -101,39 +141,7 @@ export default function Home() {
       console.log('🔧 키보드 이벤트 리스너 해제됨');
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, []);
-
-  // 관리자 모드 토글
-  const toggleAdminMode = useCallback(() => {
-    setIsAdminMode(prev => {
-      const newMode = !prev;
-      if (newMode) {
-        console.log('🔓 관리자 모드가 활성화되었습니다.');
-        sessionStorage.setItem('adminMode', 'true');
-        
-        // GA4 이벤트 전송
-        gtag_event('admin_mode_activate', {
-          event_label: '관리자_모드_활성화',
-          method: 'manual_toggle',
-          timestamp: new Date().toISOString()
-        });
-        
-        setTimeout(() => {
-          console.log('✅ 관리자 모드 활성화 완료!');
-          console.log('📊 "사용 통계" 버튼을 클릭하여 모든 사용자의 로그를 확인하세요.');
-          console.log('🌍 이제 GA4에서도 실시간으로 모든 사용자 데이터를 확인할 수 있습니다!');
-        }, 100);
-      } else {
-        console.log('🔒 관리자 모드가 비활성화되었습니다.');
-        sessionStorage.removeItem('adminMode');
-        setTimeout(() => {
-          console.log('✅ 관리자 모드 비활성화 완료!');
-        }, 100);
-      }
-      return newMode;
-    });
-    // 관리자 모드 토글 완료
-  }, []);
+  }, [toggleAdminMode]);
 
   // 타이틀 클릭 핸들러 (히든 관리자 모드 접근)
   const handleTitleClick = () => {
@@ -166,7 +174,6 @@ export default function Home() {
       console.log('🚀 지금 바로 시도해보세요: activateAdminMode()');
       localStorage.setItem('adminModeGuideShown', 'true');
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
 
@@ -209,9 +216,12 @@ export default function Home() {
     const end = new Date();
     end.setHours(endTime.hours);
     end.setMinutes(endTime.minutes);
+    end.setSeconds(0);
+    end.setMilliseconds(0);
     
-    // 종료 시각이 현재보다 이전이면 다음 날로 설정
-    if (end < now) {
+    // 종료 시각이 현재보다 이전이거나 5분 이내면 다음 날로 설정
+    const minTime = new Date(now.getTime() + 5 * 60 * 1000); // 현재 + 5분
+    if (end <= minTime) {
       end.setDate(end.getDate() + 1);
     }
     
@@ -226,7 +236,15 @@ export default function Home() {
     const end = new Date();
     end.setHours(hours);
     end.setMinutes(minutes);
-    if (end < now) end.setDate(end.getDate() + 1);
+    end.setSeconds(0);
+    end.setMilliseconds(0);
+    
+    // 종료 시각이 현재보다 이전이거나 5분 이내면 다음 날로 설정
+    const minTime = new Date(now.getTime() + 5 * 60 * 1000); // 현재 + 5분
+    if (end <= minTime) {
+      end.setDate(end.getDate() + 1);
+    }
+    
     return Math.floor((end.getTime() - now.getTime()) / (1000 * 60));
   }
 
@@ -284,7 +302,6 @@ export default function Home() {
   };
 
   const handleTaskAdd = (newTask: Omit<Task, 'id' | 'duration'>) => {
-    const totalMinutes = calculateTotalMinutes();
     const task: Task = {
       ...newTask,
       id: Math.random().toString(36).substr(2, 9),
@@ -292,7 +309,7 @@ export default function Home() {
     };
     const nextTasks = [...tasks, task];
 
-    setTasks(calculatePercentagesFromMinutes(nextTasks, totalMinutes));
+    setTasks(calculatePercentagesFromMinutes(nextTasks, initialTotalMinutes));
     
     // 작업 추가 로그
     logTaskAdd(task);
@@ -301,8 +318,7 @@ export default function Home() {
   const handleTaskDelete = (id: string) => {
     const taskToDelete = tasks.find(task => task.id === id);
     const filtered = tasks.filter(task => task.id !== id);
-    const totalMinutes = calculateTotalMinutes();
-    setTasks(calculatePercentagesFromMinutes(filtered, totalMinutes));
+    setTasks(calculatePercentagesFromMinutes(filtered, initialTotalMinutes));
     
     // 작업 삭제 로그
     if (taskToDelete) {
@@ -320,11 +336,7 @@ export default function Home() {
       }
     }
 
-    const nextTaskIndex = tasks.findIndex(t => t.id === taskId) + 1;
-    if (nextTaskIndex < tasks.length) {
-      // 다음 작업으로 전환 (마지막 작업이 아닌 경우에만)
-      setCurrentTaskId(tasks[nextTaskIndex].id);
-    }
+    // 다음 작업으로 전환은 CircleTimer에서 자동으로 처리됨
     // 타이머 완료 처리는 CircleTimer에서 총 시간 기준으로 처리
   };
 
@@ -347,7 +359,7 @@ export default function Home() {
     setTasks(calculatePercentagesFromMinutes(tasks, totalMinutes));
     setIsRunning(true);
     setStartTime(new Date());
-    setCurrentTaskId(tasks[0]?.id || null);
+
     setIsTimeSelectVisible(false);
     setIsTaskFormVisible(false);
     
@@ -371,7 +383,7 @@ export default function Home() {
     setStartTime(null);
     setActualEndTime(null); // 실제 종료 시간도 초기화
     setTasks([]);
-    setCurrentTaskId(null);
+
     setIsTimeSelectVisible(false);
     setIsTaskFormVisible(false);
   };
@@ -382,10 +394,9 @@ export default function Home() {
   const handleTaskCountChange = (type: 'add' | 'remove') => {
     if (type === 'add') {
       const newTaskNumber = tasks.length + 1;
-      const totalMinutes = calculateTotalMinutes();
       
       // 기존 작업들의 시간 조정
-      const newTaskMinutes = Math.floor(totalMinutes / newTaskNumber);
+      const newTaskMinutes = Math.floor(initialTotalMinutes / newTaskNumber);
       const updatedTasks = tasks.map(task => ({
         ...task,
         minutes: newTaskMinutes,
@@ -402,22 +413,21 @@ export default function Home() {
         duration: newTaskMinutes
       };
 
-      setTasks(calculatePercentagesFromMinutes([...updatedTasks, newTask], totalMinutes));
+      setTasks(calculatePercentagesFromMinutes([...updatedTasks, newTask], initialTotalMinutes));
     } else {
       if (tasks.length <= 1) return;
 
       const newTaskNumber = tasks.length - 1;
-      const totalMinutes = calculateTotalMinutes();
 
       // 마지막 작업을 제외하고 나머지 작업들의 시간 조정
-      const newTaskMinutes = Math.floor(totalMinutes / newTaskNumber);
+      const newTaskMinutes = Math.floor(initialTotalMinutes / newTaskNumber);
       const updatedTasks = tasks.slice(0, -1).map(task => ({
         ...task,
         minutes: newTaskMinutes,
         duration: newTaskMinutes
       }));
 
-      setTasks(calculatePercentagesFromMinutes(updatedTasks, totalMinutes));
+      setTasks(calculatePercentagesFromMinutes(updatedTasks, initialTotalMinutes));
     }
   };
 
@@ -432,7 +442,6 @@ export default function Home() {
   // TaskList에서 작업 이름/시간/색상 수정 시 호출
   const handleTaskUpdate = (id: string, updates: Partial<Pick<Task, 'name' | 'percentage' | 'minutes' | 'seconds' | 'duration' | 'color'>>) => {
     setTasks(prevTasks => {
-      const totalMinutes = calculateTotalMinutes();
       const nextTasks = prevTasks.map(task => {
         if (task.id === id) {
           return {
@@ -442,7 +451,7 @@ export default function Home() {
         }
         return task;
       });
-      return calculatePercentagesFromMinutes(nextTasks, totalMinutes);
+      return calculatePercentagesFromMinutes(nextTasks, initialTotalMinutes);
     });
     
     // 작업 수정 로그
@@ -510,7 +519,7 @@ export default function Home() {
         console.error('❌ 공유 URL 처리 오류:', error);
       }
     }
-  }, []);
+  }, [handleLoadSet]);
 
   const handleDeleteSet = (id: string) => {
     const saved = localStorage.getItem('timerSets');
@@ -535,8 +544,7 @@ export default function Home() {
     } else if (direction === 'down' && index < newTasks.length - 1) {
       [newTasks[index], newTasks[index + 1]] = [newTasks[index + 1], newTasks[index]];
     }
-    const totalMinutes = calculateTotalMinutes();
-    setTasks(calculatePercentagesFromMinutes(newTasks, totalMinutes));
+    setTasks(calculatePercentagesFromMinutes(newTasks, initialTotalMinutes));
   };
 
   // 🗑️ 불필요한 taskTotalMinutes 계산 제거됨 - calculateTotalMinutes() 사용
@@ -556,7 +564,7 @@ export default function Home() {
         id: `current-${Date.now()}`,
         name: '현재 타이머 설정',
         tasks: tasks,
-        totalMinutes: calculateTotalMinutes(),
+        totalMinutes: initialTotalMinutes,
         createdAt: new Date()
       };
 

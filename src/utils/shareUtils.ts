@@ -56,7 +56,11 @@ export function parseSharedTimerSet(shareParam: string): TimerSet | null {
     console.log('🔓 디코딩 완료:', decoded);
 
     // JSON 파싱
-    const shareData = JSON.parse(decoded);
+    const shareData = JSON.parse(decoded) as {
+      name: string;
+      tasks: Array<{ name: string; minutes: number; color: string }>;
+      totalMinutes: number;
+    };
     console.log('📋 파싱된 데이터:', shareData);
 
     // 유효성 검사
@@ -68,7 +72,7 @@ export function parseSharedTimerSet(shareParam: string): TimerSet | null {
     const timerSet: TimerSet = {
       id: `shared-${Date.now()}`,
       name: shareData.name,
-      tasks: shareData.tasks.map((task: any, index: number) => ({
+      tasks: shareData.tasks.map((task, index: number) => ({
         id: `shared-task-${index}`,
         name: task.name,
         minutes: task.minutes,
